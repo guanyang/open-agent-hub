@@ -13,6 +13,7 @@ audience: general             # beginners | intermediate | experts | executives 
 language: auto                # auto | en | zh | ja | etc.
 review: true                  # true = review outline before generation
 preferred_image_backend: auto # auto | ask | <backend-id>
+generation_batch_size: 4      # 1-8, used when backend/runtime supports batch or parallel slide generation
 
 ## Custom Dimensions (only when style: custom)
 dimensions:
@@ -42,6 +43,7 @@ custom_styles:
 | `language` | string | `auto` | Output language (auto = detect from input) |
 | `review` | boolean | `true` | Show outline review before generation |
 | `preferred_image_backend` | string | `auto` | Image backend selection. `auto` = prefer runtime-native tool, fall back to the only installed backend, ask if multiple non-native are present. `ask` = always confirm on every run. `<backend-id>` (e.g., `codex-imagegen`, `baoyu-imagine`, `image_generate`) = pin this backend when available; fall back to `auto` when it isn't. Absent = `auto`. Resolution logic is documented in `SKILL.md`'s `## Image Generation Tools` section. |
+| `generation_batch_size` | int | 4 | Number of slide images to dispatch per batch when the backend has native batch support or the runtime can issue parallel generation calls. Clamp invalid values to 1-8. Current user request overrides this value. |
 
 ### Custom Dimensions
 

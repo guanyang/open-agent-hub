@@ -186,12 +186,36 @@ default:
 `;
 }
 
+function escapeAppleScriptString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function getAppleScriptImageType(imagePath: string): string {
+  const ext = path.extname(imagePath).toLowerCase();
+  switch (ext) {
+    case '.png':
+      return '«class PNGf»';
+    case '.jpg':
+    case '.jpeg':
+      return 'JPEG picture';
+    case '.gif':
+      return 'GIF picture';
+    default:
+      throw new Error(`macOS clipboard image copy supports PNG, JPEG, and GIF via AppleScript; convert ${ext || 'this file'} to PNG first.`);
+  }
+}
+
+async function copyImageMacWithOsascript(imagePath: string): Promise<void> {
+  const imageType = getAppleScriptImageType(imagePath);
+  const escapedPath = escapeAppleScriptString(imagePath);
+  await runCommand('osascript', [
+    '-e',
+    `set the clipboard to (read (POSIX file "${escapedPath}") as ${imageType})`,
+  ]);
+}
+
 async function copyImageMac(imagePath: string): Promise<void> {
-  await withTempDir('copy-to-clipboard-', async (tempDir) => {
-    const swiftPath = path.join(tempDir, 'clipboard.swift');
-    await writeFile(swiftPath, getMacSwiftClipboardSource(), 'utf8');
-    await runCommand('swift', [swiftPath, 'image', imagePath]);
-  });
+  await copyImageMacWithOsascript(imagePath);
 }
 
 async function copyHtmlMac(htmlFilePath: string): Promise<void> {
@@ -377,4 +401,3 @@ await main().catch((err) => {
   console.error(`Error: ${message}`);
   process.exit(1);
 });
-

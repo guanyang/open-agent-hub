@@ -28,6 +28,8 @@ default_output_dir: null  # same-dir|illustrations-subdir|independent
 
 preferred_image_backend: auto  # auto|ask|<backend-id>
 
+generation_batch_size: 4       # 1-8, used when backend/runtime supports batch or parallel generation
+
 custom_styles:
   - name: my-style
     description: "Style description"
@@ -55,6 +57,7 @@ custom_styles:
 | `language` | string | null | Output language (null = auto-detect) |
 | `default_output_dir` | enum | null | Output directory preference (null = ask each time) |
 | `preferred_image_backend` | string | `auto` | Image backend selection. `auto` = prefer runtime-native tool, fall back to the only installed backend, ask if multiple non-native are present. `ask` = always confirm on every run. `<backend-id>` (e.g., `codex-imagegen`, `baoyu-imagine`, `image_generate`) = pin this backend when available; fall back to `auto` when it isn't. Absent = `auto`. Resolution logic is documented in `SKILL.md`'s `## Image Generation Tools` section. |
+| `generation_batch_size` | int | 4 | Number of images to dispatch per batch when the backend has native batch support or the runtime can issue parallel generation calls. Clamp invalid values to 1-8. Current user request overrides this value. |
 | `custom_styles` | array | [] | User-defined styles |
 
 ## Position Options
@@ -117,6 +120,8 @@ preferred_style:
 language: zh
 
 preferred_image_backend: codex-imagegen
+
+generation_batch_size: 4
 
 custom_styles:
   - name: corporate

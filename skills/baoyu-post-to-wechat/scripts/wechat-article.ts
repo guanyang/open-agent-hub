@@ -7,6 +7,7 @@ import { launchChrome, tryConnectExisting, findExistingChromeDebugPort, getPageS
 import { loadWechatExtendConfig, resolveAccount } from './wechat-extend-config.ts';
 
 const WECHAT_URL = 'https://mp.weixin.qq.com/';
+const BODY_EDITOR_SELECTOR = '.rich_media_content .ProseMirror';
 
 interface ImageInfo {
   placeholder: string;
@@ -196,27 +197,27 @@ async function pasteInEditor(session: ChromeSession): Promise<void> {
 }
 
 async function sendCopy(cdp?: CdpConnection, sessionId?: string): Promise<void> {
-  if (process.platform === 'darwin') {
+  if (cdp && sessionId) {
+    const modifiers = process.platform === 'darwin' ? 4 : 2;
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'c', code: 'KeyC', modifiers, windowsVirtualKeyCode: 67 }, { sessionId });
+    await sleep(50);
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'c', code: 'KeyC', modifiers, windowsVirtualKeyCode: 67 }, { sessionId });
+  } else if (process.platform === 'darwin') {
     spawnSync('osascript', ['-e', 'tell application "System Events" to keystroke "c" using command down']);
   } else if (process.platform === 'linux') {
     spawnSync('xdotool', ['key', 'ctrl+c']);
-  } else if (cdp && sessionId) {
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'c', code: 'KeyC', modifiers: 2, windowsVirtualKeyCode: 67 }, { sessionId });
-    await sleep(50);
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'c', code: 'KeyC', modifiers: 2, windowsVirtualKeyCode: 67 }, { sessionId });
   }
 }
 
 async function sendPaste(cdp?: CdpConnection, sessionId?: string): Promise<void> {
-  if (process.platform === 'darwin') {
-    spawnSync('osascript', ['-e', 'tell application "System Events" to keystroke "v" using command down']);
-  } else if (process.platform === 'linux') {
-    spawnSync('xdotool', ['key', 'ctrl+v']);
-  } else if (cdp && sessionId) {
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'v', code: 'KeyV', modifiers: 2, windowsVirtualKeyCode: 86 }, { sessionId });
-    await sleep(50);
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'v', code: 'KeyV', modifiers: 2, windowsVirtualKeyCode: 86 }, { sessionId });
+  if (!cdp || !sessionId) {
+    throw new Error('Targeted paste requires a Chrome DevTools session');
   }
+
+  const modifiers = process.platform === 'darwin' ? 4 : 2;
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'v', code: 'KeyV', modifiers, windowsVirtualKeyCode: 86 }, { sessionId });
+  await sleep(50);
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'v', code: 'KeyV', modifiers, windowsVirtualKeyCode: 86 }, { sessionId });
 }
 
 async function copyHtmlFromBrowser(cdp: CdpConnection, htmlFilePath: string, contentImages: ImageInfo[] = []): Promise<void> {
@@ -294,6 +295,82 @@ async function pasteFromClipboardInEditor(session: ChromeSession): Promise<void>
   await sleep(1000);
 }
 
+async function insertHtmlIntoEditorFromFile(
+  session: ChromeSession,
+  htmlFilePath: string,
+  contentImages: ImageInfo[] = [],
+): Promise<void> {
+  const absolutePath = path.isAbsolute(htmlFilePath) ? htmlFilePath : path.resolve(process.cwd(), htmlFilePath);
+  const html = fs.readFileSync(absolutePath, 'utf8');
+  const replacements = contentImages.map(img => ({ placeholder: img.placeholder, localPath: img.localPath }));
+
+  const result = await session.cdp.send<{ result: { value: string } }>('Runtime.evaluate', {
+    expression: `
+      (function() {
+        const editor = document.querySelector(${JSON.stringify(BODY_EDITOR_SELECTOR)});
+        if (!editor) return JSON.stringify({ ok: false, reason: 'editor-missing' });
+
+        const template = document.createElement('template');
+        template.innerHTML = ${JSON.stringify(html)};
+        const replacements = ${JSON.stringify(replacements)};
+
+        for (const img of Array.from(template.content.querySelectorAll('img'))) {
+          const src = img.getAttribute('src') || '';
+          const localPath = img.getAttribute('data-local-path') || '';
+          const replacement = replacements.find((item) => item.placeholder === src || item.localPath === localPath);
+          if (replacement) {
+            img.replaceWith(document.createTextNode(replacement.placeholder));
+          }
+        }
+
+        const output = template.content.querySelector('#output');
+        const wrapper = document.createElement('div');
+        if (output) {
+          wrapper.innerHTML = output.innerHTML;
+        } else {
+          wrapper.appendChild(template.content.cloneNode(true));
+        }
+
+        editor.focus();
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.deleteContents();
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        const inserted = document.execCommand('insertHTML', false, wrapper.innerHTML);
+        editor.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          inputType: 'insertHTML',
+          data: wrapper.innerText || ''
+        }));
+
+        return JSON.stringify({
+          ok: inserted || (editor.innerText || '').trim().length > 0,
+          textLength: (editor.innerText || '').trim().length
+        });
+      })()
+    `,
+    returnByValue: true,
+  }, { sessionId: session.sessionId });
+
+  const parsed = JSON.parse(result.result.value || '{}') as { ok?: boolean; reason?: string; textLength?: number };
+  if (!parsed.ok) {
+    throw new Error(`Failed to insert HTML into body editor${parsed.reason ? `: ${parsed.reason}` : ''}`);
+  }
+}
+
+async function verifyTitleUnchangedBeforeSave(session: ChromeSession, expectedTitle: string): Promise<void> {
+  if (!expectedTitle) return;
+
+  const actualTitle = await evaluate<string>(session, `document.querySelector('#title')?.value || ''`);
+  if (actualTitle !== expectedTitle) {
+    throw new Error(`Title was modified during paste. Expected: "${expectedTitle}", got: "${actualTitle}"`);
+  }
+}
+
 async function prepareEditorPasteTarget(
   session: ChromeSession,
   context: string,
@@ -303,19 +380,24 @@ async function prepareEditorPasteTarget(
   await sleep(100);
 
   if (options.clickEditor) {
-    await clickElement(session, '.ProseMirror');
+    await clickElement(session, BODY_EDITOR_SELECTOR);
     await sleep(200);
   }
 
   const ready = await evaluate<boolean>(session, `
     (function() {
-      const editor = document.querySelector('.ProseMirror');
+      const editor = document.querySelector(${JSON.stringify(BODY_EDITOR_SELECTOR)});
       if (!editor) return false;
 
       const active = document.activeElement;
       const selection = window.getSelection();
       const selectionInEditor = !!selection && selection.rangeCount > 0 && !!selection.anchorNode && editor.contains(selection.anchorNode);
       const focusInEditor = !!active && (active === editor || editor.contains(active));
+      const activeIsUnsafeInput = !!active && (
+        active.matches?.('#title, #author, #js_description') ||
+        ((active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') && !editor.contains(active))
+      );
+      if (activeIsUnsafeInput) return false;
       if (selectionInEditor || focusInEditor) return true;
 
       if (${JSON.stringify(Boolean(options.clickEditor))}) {
@@ -438,7 +520,7 @@ async function selectAndReplacePlaceholder(session: ChromeSession, placeholder: 
   const result = await session.cdp.send<{ result: { value: boolean } }>('Runtime.evaluate', {
     expression: `
       (function() {
-        const editor = document.querySelector('.ProseMirror');
+        const editor = document.querySelector(${JSON.stringify(BODY_EDITOR_SELECTOR)});
         if (!editor) return false;
 
         const placeholder = ${JSON.stringify(placeholder)};
@@ -456,6 +538,7 @@ async function selectAndReplacePlaceholder(session: ChromeSession, placeholder: 
             // Exact match if next char is not a digit
             if (charAfter === undefined || !/\\d/.test(charAfter)) {
               node.parentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              editor.focus();
 
               const range = document.createRange();
               range.setStart(node, idx);
@@ -486,7 +569,7 @@ async function pressDeleteKey(session: ChromeSession): Promise<void> {
 async function removeExtraEmptyLineAfterImage(session: ChromeSession): Promise<boolean> {
   const removed = await evaluate<boolean>(session, `
     (function() {
-      const editor = document.querySelector('.ProseMirror');
+      const editor = document.querySelector(${JSON.stringify(BODY_EDITOR_SELECTOR)});
       if (!editor) return false;
 
       const sel = window.getSelection();
@@ -548,6 +631,101 @@ async function removeExtraEmptyLineAfterImage(session: ChromeSession): Promise<b
   return removed;
 }
 
+async function getBodyImageCount(session: ChromeSession): Promise<number> {
+  return await evaluate<number>(session, `
+    (function() {
+      const editor = document.querySelector(${JSON.stringify(BODY_EDITOR_SELECTOR)});
+      if (!editor) return 0;
+      return Array.from(editor.querySelectorAll('img')).filter((img) => !img.classList.contains('ProseMirror-separator')).length;
+    })()
+  `);
+}
+
+async function waitForBodyImageCount(session: ChromeSession, minimumCount: number, timeoutMs = 45_000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const count = await getBodyImageCount(session);
+    if (count >= minimumCount) return true;
+    await sleep(500);
+  }
+  return false;
+}
+
+async function uploadImageThroughFileInput(session: ChromeSession, imagePath: string): Promise<void> {
+  const absolutePath = path.isAbsolute(imagePath) ? imagePath : path.resolve(process.cwd(), imagePath);
+  if (!fs.existsSync(absolutePath)) throw new Error(`Image file not found: ${absolutePath}`);
+
+  const beforeCount = await getBodyImageCount(session);
+  const documentNode = await session.cdp.send<{ root: { nodeId: number } }>('DOM.getDocument', {
+    depth: -1,
+    pierce: true,
+  }, { sessionId: session.sessionId });
+  const inputNode = await session.cdp.send<{ nodeId: number }>('DOM.querySelector', {
+    nodeId: documentNode.root.nodeId,
+    selector: 'input[type="file"][accept*="image"]',
+  }, { sessionId: session.sessionId });
+
+  if (!inputNode.nodeId) throw new Error('WeChat local image upload input not found');
+
+  await session.cdp.send('DOM.setFileInputFiles', {
+    nodeId: inputNode.nodeId,
+    files: [absolutePath],
+  }, { sessionId: session.sessionId });
+
+  const inserted = await waitForBodyImageCount(session, beforeCount + 1);
+  if (!inserted) {
+    const afterCount = await getBodyImageCount(session);
+    throw new Error(`Image upload did not insert into editor: ${path.basename(absolutePath)} (${beforeCount} -> ${afterCount})`);
+  }
+}
+
+interface DraftSaveStatus {
+  appmsgid: string;
+  isLoading: boolean;
+  submitText: string;
+  url: string;
+  messages: string[];
+}
+
+async function getDraftSaveStatus(session: ChromeSession): Promise<DraftSaveStatus> {
+  const raw = await evaluate<string>(session, `
+    (function() {
+      const submit = document.querySelector('#js_submit');
+      const button = submit?.querySelector('button');
+      const url = location.href;
+      const appmsgid = new URL(url).searchParams.get('appmsgid') || '';
+      const messages = Array.from(document.querySelectorAll('.weui-desktop-toast, .weui-desktop-toptips, .js_tips'))
+        .map((el) => (el.innerText || el.textContent || '').trim())
+        .filter(Boolean);
+      return JSON.stringify({
+        appmsgid,
+        isLoading: !!submit?.classList.contains('btn_loading') || !!button?.disabled,
+        submitText: (submit?.innerText || '').trim(),
+        url,
+        messages
+      });
+    })()
+  `);
+  return JSON.parse(raw || '{}') as DraftSaveStatus;
+}
+
+async function waitForDraftSaved(session: ChromeSession, timeoutMs = 60_000): Promise<string> {
+  const start = Date.now();
+  let lastStatus: DraftSaveStatus | null = null;
+
+  while (Date.now() - start < timeoutMs) {
+    lastStatus = await getDraftSaveStatus(session);
+    if (lastStatus.appmsgid && !lastStatus.isLoading) return lastStatus.appmsgid;
+
+    const relevantFailure = lastStatus.messages.find((message) => /保存.*失败|草稿.*失败|save.*fail/i.test(message));
+    if (relevantFailure) throw new Error(`Draft save failed: ${relevantFailure}`);
+
+    await sleep(1000);
+  }
+
+  throw new Error(`Draft save did not complete${lastStatus ? `: ${JSON.stringify(lastStatus)}` : ''}`);
+}
+
 export async function postArticle(options: ArticleOptions): Promise<void> {
   const { title, content, htmlFile, markdownFile, theme, color, citeStatus = true, author, summary, images = [], submit = false, profileDir, cdpPort } = options;
   let { contentImages = [] } = options;
@@ -591,7 +769,7 @@ export async function postArticle(options: ArticleOptions): Promise<void> {
   let chrome: ReturnType<typeof import('node:child_process').spawn> | null = null;
 
   // Try connecting to existing Chrome: explicit port > auto-detect > launch new
-  const portToTry = cdpPort ?? await findExistingChromeDebugPort();
+  const portToTry = cdpPort ?? await findExistingChromeDebugPort(profileDir);
   if (portToTry) {
     const existing = await tryConnectExisting(portToTry);
     if (existing) {
@@ -680,7 +858,7 @@ export async function postArticle(options: ArticleOptions): Promise<void> {
     console.log('[wechat] Waiting for editor to load...');
     const editorLoaded = await waitForElement(session, '#title', 30_000);
     if (!editorLoaded) throw new Error('Editor did not load (#title not found)');
-    await waitForElement(session, '.ProseMirror', 15_000);
+    await waitForElement(session, BODY_EDITOR_SELECTOR, 15_000);
     await sleep(2000);
 
     if (effectiveTitle) {
@@ -705,25 +883,23 @@ export async function postArticle(options: ArticleOptions): Promise<void> {
     }
 
     console.log('[wechat] Clicking on editor...');
-    await clickElement(session, '.ProseMirror');
+    await clickElement(session, BODY_EDITOR_SELECTOR);
     await sleep(1000);
 
     console.log('[wechat] Ensuring editor focus...');
-    await clickElement(session, '.ProseMirror');
+    await clickElement(session, BODY_EDITOR_SELECTOR);
     await sleep(500);
 
     if (effectiveHtmlFile && fs.existsSync(effectiveHtmlFile)) {
-      console.log(`[wechat] Copying HTML content from: ${effectiveHtmlFile}`);
-      await copyHtmlFromBrowser(cdp, effectiveHtmlFile, contentImages);
-      await sleep(500);
+      console.log(`[wechat] Inserting HTML content from: ${effectiveHtmlFile}`);
       await prepareEditorPasteTarget(session, 'body content paste', { clickEditor: true });
-      console.log('[wechat] Pasting into editor...');
-      await pasteFromClipboardInEditor(session);
+      await insertHtmlIntoEditorFromFile(session, effectiveHtmlFile, contentImages);
       await sleep(3000);
+      await verifyTitleUnchangedBeforeSave(session, effectiveTitle);
 
       const editorHasContent = await evaluate<boolean>(session, `
         (function() {
-          const editor = document.querySelector('.ProseMirror');
+          const editor = document.querySelector(${JSON.stringify(BODY_EDITOR_SELECTOR)});
           if (!editor) return false;
           const text = editor.innerText?.trim() || '';
           return text.length > 0;
@@ -749,18 +925,15 @@ export async function postArticle(options: ArticleOptions): Promise<void> {
 
           await sleep(500);
 
-          console.log(`[wechat] Copying image: ${path.basename(img.localPath)}`);
-          await copyImageToClipboard(img.localPath);
-          await sleep(300);
-
           console.log('[wechat] Deleting placeholder with Backspace...');
           await pressDeleteKey(session);
           await sleep(200);
 
-          console.log('[wechat] Pasting image...');
-          await prepareEditorPasteTarget(session, 'inline image paste');
-          await pasteFromClipboardInEditor(session);
-          await sleep(3000);
+          console.log(`[wechat] Uploading image: ${path.basename(img.localPath)}`);
+          await prepareEditorPasteTarget(session, 'inline image upload');
+          await uploadImageThroughFileInput(session, img.localPath);
+          await sleep(1000);
+          await verifyTitleUnchangedBeforeSave(session, effectiveTitle);
           await removeExtraEmptyLineAfterImage(session);
         }
         console.log('[wechat] All images inserted.');
@@ -768,12 +941,10 @@ export async function postArticle(options: ArticleOptions): Promise<void> {
     } else if (content) {
       for (const img of images) {
         if (fs.existsSync(img)) {
-          console.log(`[wechat] Pasting image: ${img}`);
-          await copyImageToClipboard(img);
-          await sleep(500);
-          await prepareEditorPasteTarget(session, 'leading image paste');
-          await pasteInEditor(session);
-          await sleep(2000);
+          console.log(`[wechat] Uploading image: ${img}`);
+          await prepareEditorPasteTarget(session, 'leading image upload');
+          await uploadImageThroughFileInput(session, img);
+          await sleep(1000);
           await removeExtraEmptyLineAfterImage(session);
         }
       }
@@ -785,7 +956,7 @@ export async function postArticle(options: ArticleOptions): Promise<void> {
 
       const editorHasContent = await evaluate<boolean>(session, `
         (function() {
-          const editor = document.querySelector('.ProseMirror');
+          const editor = document.querySelector(${JSON.stringify(BODY_EDITOR_SELECTOR)});
           if (!editor) return false;
           const text = editor.innerText?.trim() || '';
           return text.length > 0;
@@ -822,17 +993,12 @@ export async function postArticle(options: ArticleOptions): Promise<void> {
       }
     }
 
+    await verifyTitleUnchangedBeforeSave(session, effectiveTitle);
+
     console.log('[wechat] Saving as draft...');
     await evaluate(session, `document.querySelector('#js_submit button').click()`);
-    await sleep(3000);
-
-    const saved = await evaluate<boolean>(session, `!!document.querySelector('.weui-desktop-toast')`);
-    if (saved) {
-      console.log('[wechat] Draft saved successfully!');
-    } else {
-      console.log('[wechat] Waiting for save confirmation...');
-      await sleep(5000);
-    }
+    const appmsgid = await waitForDraftSaved(session);
+    console.log(`[wechat] Draft saved successfully! appmsgid: ${appmsgid}`);
 
     console.log('[wechat] Done. Browser window left open.');
   } finally {

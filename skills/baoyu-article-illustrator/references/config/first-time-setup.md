@@ -129,11 +129,14 @@ preferred_style:
 default_output_dir: imgs-subdir  # same-dir | imgs-subdir | illustrations-subdir | independent
 language: null
 preferred_image_backend: auto
+generation_batch_size: 4
 custom_styles: []
 ---
 ```
 
 `preferred_image_backend: auto` is the baked-in default — first-time setup does not ask about it. The `## Image Generation Tools` rule in SKILL.md then picks the runtime-native tool (Codex `imagegen`, Hermes `image_generate`, etc.) when available, and falls back to installed backends.
+
+`generation_batch_size: 4` is the baked-in default for batch rendering. The current user request may override it for one run.
 
 ## Modifying Preferences Later
 

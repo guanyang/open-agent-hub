@@ -488,12 +488,19 @@ When character sheet was skipped or `--ref` failed:
 - No `--ref` parameter needed
 - Rely on detailed text descriptions for character consistency
 
-**For each page (cover + pages)**:
-1. Read prompt from `prompts/NN-{cover|page}-[slug].md`
-2. **Backup rule**: If image file exists, rename to `NN-{cover|page}-[slug]-backup-YYYYMMDD-HHMMSS.png`
-3. Generate image using Strategy A, B, or C
-4. Save to `NN-{cover|page}-[slug].png`
-5. Report progress after each generation: "Generated X/N: [page title]"
+**Page batch generation (cover + pages)**:
+1. Build a page task list from selected saved prompts:
+   - `prompt_file`: `prompts/NN-{cover|page}-[slug].md`
+   - `output_file`: `NN-{cover|page}-[slug].png`
+   - `aspect_ratio`: from storyboard (default `3:4`; preset may override)
+   - `refs`: character sheet and verified direct user refs when Strategy A is active
+2. **Backup rule**: Before dispatching a task, if its image file exists, rename it to `NN-{cover|page}-[slug]-backup-YYYYMMDD-HHMMSS.png`.
+3. Dispatch tasks in batches:
+   - Native batch backend: send all eligible page tasks, or chunks of `generation_batch_size` if the backend has a practical limit.
+   - Runtime parallel calls: issue up to `generation_batch_size` image calls concurrently, then continue with the next chunk.
+   - Sequential fallback: process one page at a time.
+4. After each completed task, report: "Generated X/N: [page title]".
+5. On failure, retry the failed task once from the same saved prompt file. Keep successful outputs and continue.
 
 **Session Management**:
 If image generation skill supports `--sessionId`:

@@ -1,7 +1,7 @@
 ---
 name: baoyu-xhs-images
 description: "[Deprecated: use baoyu-image-cards] Generates Xiaohongshu (Little Red Book) image card series with 12 visual styles, 8 layouts, and 3 color palettes. Breaks content into 1-10 cartoon-style image cards optimized for XHS engagement. Use when user mentions \"小红书图片\", \"XHS images\", \"RedNote infographics\", \"小红书种草\", \"小绿书\", \"微信图文\", \"微信贴图\", or wants social media infographic series for Chinese platforms."
-version: 1.56.2
+version: 1.57.0
 metadata:
   openclaw:
     homepage: https://github.com/JimLiu/baoyu-skills#baoyu-xhs-images
@@ -43,6 +43,23 @@ Setting `preferred_image_backend: ask` forces the step-3 prompt every run regard
 
 Concrete tool names (`imagegen`, `image_generate`, `baoyu-imagine`) above are examples — substitute the local equivalents under the same rule.
 
+## Batch Generation Policy
+
+After every prompt file for the current generation group has been saved and verified, generate images in batches by default.
+
+Priority order:
+
+1. Use the chosen backend's native batch / multi-task interface if it exists. Each task must keep its own prompt file, output path, aspect ratio, session ID, and direct reference images.
+2. If no native batch interface exists but the runtime can issue parallel tool calls, dispatch up to `generation_batch_size` images at a time. Default: `4`. An explicit user request in the current message, such as `--batch-size 4` or "并行4张一起生成", overrides EXTEND.md.
+3. If neither native batch nor parallel tool calls are available, generate sequentially.
+
+Rules:
+
+- Honor the image-1 anchor chain: generate image 1 first, then batch images 2+ using image 1 as the reference.
+- Never start a batch until every selected prompt file for that batch exists on disk.
+- Retry failed items once without regenerating successful items.
+- Do not use subagents merely to parallelize image rendering. Use subagents only for separate prompt iteration or creative exploration.
+
 ## Confirmation Policy
 
 Default behavior: **confirm before generation**.
@@ -65,6 +82,7 @@ Respond in the user's language across questions, progress, errors, and completio
 | `--palette <name>` | Color override: macaron / warm / neon |
 | `--preset <name>` | Style + layout + optional palette shorthand (see Presets below; per-preset prompt fragments in `references/style-presets.md`) |
 | `--ref <files...>` | Reference images applied to image 1 as the series anchor |
+| `--batch-size <n>` | Temporary generation batch size for this run. Default: `generation_batch_size` from EXTEND.md, otherwise 4. Clamp to 1-8. |
 | `--yes` | Non-interactive: skip all confirmations, use EXTEND.md or built-in defaults, auto-confirm recommended plan (Path A) |
 
 ## Dimensions
@@ -300,7 +318,7 @@ Check these paths in order; first hit wins:
 - **Not found + interactive** → run first-time setup (see `references/config/first-time-setup.md`) and save before anything else. Do NOT analyze content or ask style questions until preferences exist — this keeps first-run behavior predictable.
 - **Not found + `--yes`** → skip setup, use built-in defaults (no watermark, style/layout auto-selected, language from content). Do not prompt, do not create EXTEND.md.
 
-**EXTEND.md keys**: watermark, preferred style/layout, custom style definitions, language preference. Schema: `references/config/preferences-schema.md`.
+**EXTEND.md keys**: watermark, preferred style/layout, custom style definitions, language preference, preferred image backend, generation batch size. Schema: `references/config/preferences-schema.md`.
 
 ### Step 1: Analyze Content → `analysis.md`
 
@@ -349,14 +367,13 @@ With confirmed outline + style + layout + palette:
 
 **Visual consistency — image-1 anchor chain**: character / mascot / color rendering drifts between calls unless you anchor them. Generate image 1 (cover) first WITHOUT `--ref`, then pass image 1 as `--ref` to every subsequent image. This is the single most important consistency trick for this skill — don't skip it even if the backend also supports a session ID.
 
-For each image (cover, content, ending):
+Generation flow:
 
-1. Write the full prompt to `prompts/NN-{type}-{slug}.md` in the user's preferred language (backup rule applies).
-2. Generate:
-   - **Image 1**: no `--ref` (establishes the anchor).
-   - **Images 2+**: add `--ref <path-to-image-01.png>`.
-   - Backup rule applies to the PNG files.
-3. Report progress after each image.
+1. Write the full prompt for every image to `prompts/NN-{type}-{slug}.md` in the user's preferred language (backup rule applies), then verify all selected prompt files exist.
+2. Generate **image 1** first without `--ref`; backup rule applies to the PNG file. This establishes the anchor.
+3. Build a task list for **images 2+** using image 1 as `--ref <path-to-image-01.png>`.
+4. Dispatch images 2+ in batches per the `## Batch Generation Policy`: backend native batch first, runtime parallel tool calls second, sequential only as fallback.
+5. Report progress after each completed image. On failure, retry only the failed item once from the same saved prompt file.
 
 **Watermark** (if enabled in EXTEND.md): append to the generation prompt:
 
@@ -451,5 +468,6 @@ EXTEND.md lives at the first matching path listed in Step 0. Three ways to chang
   - `preferred_image_backend: codex-imagegen` — pin to Codex's built-in.
   - `preferred_image_backend: baoyu-imagine` — pin to the baoyu-imagine skill.
   - `preferred_image_backend: ask` — confirm backend every run.
+  - `generation_batch_size: 4` — default number of images to render concurrently when the backend/runtime supports batch or parallel generation.
   - `preferred_style: notion`, `preferred_layout: dense`, `preferred_palette: macaron`, `language: zh`.
   - `watermark.enabled: true` + `watermark.content: "@handle"` — add a watermark.

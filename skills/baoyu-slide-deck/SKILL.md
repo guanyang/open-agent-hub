@@ -1,7 +1,7 @@
 ---
 name: baoyu-slide-deck
 description: Generates professional slide deck images from content. Creates outlines with style instructions, then generates individual slide images. Use when user asks to "create slides", "make a presentation", "generate deck", "slide deck", or "PPT".
-version: 1.56.2
+version: 1.57.0
 metadata:
   openclaw:
     homepage: https://github.com/JimLiu/baoyu-skills#baoyu-slide-deck
@@ -46,6 +46,23 @@ Setting `preferred_image_backend: ask` forces the step-3 prompt every run regard
 
 Concrete tool names (`imagegen`, `image_generate`, `baoyu-imagine`) above are examples — substitute the local equivalents under the same rule.
 
+## Batch Generation Policy
+
+After every prompt file for the current generation group has been saved and verified, generate slide images in batches by default.
+
+Priority order:
+
+1. Use the chosen backend's native batch / multi-task interface if it exists. Each task must keep its own prompt file, output path, aspect ratio, session ID, and direct reference images.
+2. If no native batch interface exists but the runtime can issue parallel tool calls, dispatch up to `generation_batch_size` slide images at a time. Default: `4`. An explicit user request in the current message, such as `--batch-size 4` or "并行4张一起生成", overrides EXTEND.md.
+3. If neither native batch nor parallel tool calls are available, generate sequentially.
+
+Rules:
+
+- Never start the first batch until all selected slide prompt files exist on disk.
+- Retry failed items once without regenerating successful items.
+- Do not use subagents merely to parallelize image rendering. Use subagents only for separate prompt iteration or creative exploration.
+- Merge PPTX/PDF only after all selected slide images are generated.
+
 ## Confirmation Policy
 
 Default behavior: **confirm before generation**.
@@ -77,6 +94,7 @@ Respond in the user's language across questions, progress reports, error message
 | `--lang <code>` | Output language (en, zh, ja, ...) |
 | `--slides <N>` | Target slide count (8-25 recommended, max 30) |
 | `--ref <files...>` | Reference images applied per slide (style / palette / composition / subject) |
+| `--batch-size <n>` | Temporary slide image generation batch size for this run. Default: `generation_batch_size` from EXTEND.md, otherwise 4. Clamp to 1-8. |
 | `--outline-only` | Stop after outline |
 | `--prompts-only` | Stop after prompts (skip image generation) |
 | `--images-only` | Skip to Step 7; requires existing `prompts/` |
@@ -223,7 +241,7 @@ Copy this checklist and check off items as you complete them:
 | `${XDG_CONFIG_HOME:-$HOME/.config}/baoyu-skills/baoyu-slide-deck/EXTEND.md` | XDG |
 | `$HOME/.baoyu-skills/baoyu-slide-deck/EXTEND.md` | User home |
 
-If found, read, parse, and print a summary (style / audience / language / review). If not, proceed with defaults — first-time setup is not blocking for this skill. Schema: `references/config/preferences-schema.md`.
+If found, read, parse, and print a summary (style / audience / language / review / generation batch size). If not, proceed with defaults — first-time setup is not blocking for this skill. Schema: `references/config/preferences-schema.md`.
 
 **1.2 Analyze content** — follow `references/analysis-framework.md`: classify content, detect language, note signals for style selection, estimate slide count from length (see the **Slide Count Heuristic** in Style System above), generate topic slug. Save source as `source.md` (honor backup rule if one exists).
 
@@ -279,7 +297,8 @@ Display the prompts index (`# | Filename | Slide Title`) and ask: proceed / edit
 1. Resolve the image backend via the Image Generation Tools rule at the top — ask once if multiple are installed.
 2. Confirm every `prompts/NN-slide-{slug}.md` exists (hard requirement; prompt files are the reproducibility record regardless of backend).
 3. Session ID: `slides-{topic-slug}-{timestamp}` — pass to the backend only if it supports sessions.
-4. For each slide: generate sequentially, reusing the session ID. Backup rule applies to PNG files. Report progress as `Generated X/N`. Auto-retry once on failure before reporting an error.
+4. Build a task list for selected slides with each slide's prompt file, output PNG path, aspect ratio, session ID, and verified direct references.
+5. Dispatch slide images in batches per the `## Batch Generation Policy`: backend native batch first, runtime parallel tool calls second, sequential only as fallback. Backup rule applies to PNG files before dispatch. Report progress as `Generated X/N`. Retry only failed items once before reporting an error.
 
 `--regenerate N` jumps to this step for the named slides only. `--images-only` starts here with existing prompts.
 
@@ -352,4 +371,5 @@ EXTEND.md lives at the first matching path listed in Step 1.1. Two ways to chang
   - `preferred_image_backend: codex-imagegen` — pin to Codex's built-in.
   - `preferred_image_backend: baoyu-imagine` — pin to the baoyu-imagine skill.
   - `preferred_image_backend: ask` — confirm backend every run.
+  - `generation_batch_size: 4` — default number of slide images to render concurrently when the backend/runtime supports batch or parallel generation.
   - `preferred_style: blueprint`, `preferred_audience: experts`, `language: zh`.

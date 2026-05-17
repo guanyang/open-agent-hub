@@ -1,7 +1,7 @@
 ---
 name: baoyu-comic
-description: Knowledge comic creator supporting multiple art styles and tones. Creates original educational comics with detailed panel layouts and sequential image generation. Use when user asks to create "知识漫画", "教育漫画", "biography comic", "tutorial comic", or "Logicomix-style comic".
-version: 1.56.1
+description: Knowledge comic creator supporting multiple art styles and tones. Creates original educational comics with detailed panel layouts and batch-capable image generation. Use when user asks to create "知识漫画", "教育漫画", "biography comic", "tutorial comic", or "Logicomix-style comic".
+version: 1.57.0
 metadata:
   openclaw:
     homepage: https://github.com/JimLiu/baoyu-skills#baoyu-comic
@@ -45,6 +45,23 @@ Setting `preferred_image_backend: ask` forces the step-3 prompt every run regard
 **Prompt file requirement (hard)**: write each image's full, final prompt to a standalone file under `prompts/` (naming: `NN-{type}-[slug].md`) BEFORE invoking any backend. The backend receives the prompt file (or its content); the file is the reproducibility record and lets you switch backends without regenerating prompts.
 
 Concrete tool names (`imagegen`, `image_generate`, `baoyu-imagine`) above are examples — substitute the local equivalents under the same rule.
+
+## Batch Generation Policy
+
+After every prompt file for the current generation group has been saved and verified, generate images in batches by default.
+
+Priority order:
+
+1. Use the chosen backend's native batch / multi-task interface if it exists. Each task must keep its own prompt file, output path, aspect ratio, session ID, and direct reference images.
+2. If no native batch interface exists but the runtime can issue parallel tool calls, dispatch up to `generation_batch_size` images at a time. Default: `4`. An explicit user request in the current message, such as `--batch-size 4` or "并行4张一起生成", overrides EXTEND.md.
+3. If neither native batch nor parallel tool calls are available, generate sequentially.
+
+Rules:
+
+- Honor workflow dependencies first: generate `characters/characters.png` before pages that use it as a reference.
+- Never start the first page batch until all selected page prompt files exist on disk.
+- Retry failed items once without regenerating successful items.
+- Do not use subagents merely to parallelize image rendering. Use subagents only for separate prompt iteration or creative exploration.
 
 ## Reference Images
 
@@ -90,6 +107,7 @@ references:
 | `--aspect` | 3:4 (default, portrait), 4:3 (landscape), 16:9 (widescreen) | Page aspect ratio |
 | `--lang` | auto (default), zh, en, ja, etc. | Output language |
 | `--ref <files...>` | File paths | Reference images applied to every page for style / palette / scene guidance. See [Reference Images](#reference-images) above. |
+| `--batch-size <n>` | 1-8 | Temporary page generation batch size for this run. Default: `generation_batch_size` from EXTEND.md, otherwise 4. |
 
 ### Partial Workflow Options
 
@@ -237,6 +255,8 @@ Analyze → [Check Existing?] → [Confirm: Style + Reviews] → Storyboard → 
 | Exists | Not supported | Prepend character descriptions to every prompt file |
 | Skipped | — | All descriptions inline in prompt |
 
+**Execution strategy**: Generate the character sheet first when needed. Then build the selected page task list from saved prompt files and dispatch pages in batches per the `## Batch Generation Policy`: backend native batch first, runtime parallel tool calls second, sequential only as fallback. `--regenerate N` and `--images-only` apply the same batching rules to the selected existing prompts.
+
 **Backup rule**: existing `prompts/…md` and `…png` files → rename with `-backup-YYYYMMDD-HHMMSS` suffix before regenerating. Aspect ratio from storyboard (default `3:4`; preset may override).
 
 **`--ref` failure recovery**: compress sheet → retry → still fails → drop `--ref` and embed character descriptions in the prompt text.
@@ -257,7 +277,7 @@ If EXTEND.md is not found, first-time setup is **blocking** — complete it befo
 | Found | Read, parse, display summary → continue |
 | Not found | ⛔ Run first-time setup ([references/config/first-time-setup.md](references/config/first-time-setup.md)) → save EXTEND.md → continue |
 
-**EXTEND.md supports**: watermark, preferred art/tone/layout, custom style definitions, character presets, language preference. Schema: [references/config/preferences-schema.md](references/config/preferences-schema.md).
+**EXTEND.md supports**: watermark, preferred art/tone/layout, custom style definitions, character presets, language preference, preferred image backend, generation batch size. Schema: [references/config/preferences-schema.md](references/config/preferences-schema.md).
 
 ## References
 
@@ -316,4 +336,5 @@ EXTEND.md lives at `.baoyu-skills/baoyu-comic/EXTEND.md` (project) or `~/.baoyu-
   - `preferred_image_backend: codex-imagegen` — pin to Codex's built-in.
   - `preferred_image_backend: baoyu-imagine` — pin to the baoyu-imagine skill.
   - `preferred_image_backend: ask` — confirm backend every run.
+  - `generation_batch_size: 4` — default number of page images to render concurrently when the backend/runtime supports batch or parallel generation.
   - `watermark.enabled: true`, `preferred_art`, `preferred_tone`, `preferred_layout`, `language` — shift the auto-selection defaults and cosmetic choices.
