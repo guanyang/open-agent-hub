@@ -28,7 +28,8 @@ type PromptReference = {
 
 function printUsage(): void {
   console.log(`Usage:
-  npx -y tsx scripts/build-batch.ts --outline outline.md --prompts prompts --output batch.json --images-dir attachments
+  bun <baseDir>/scripts/build-batch.ts --outline outline.md --prompts prompts --output batch.json --images-dir attachments
+  npx -y tsx <baseDir>/scripts/build-batch.ts --outline outline.md --prompts prompts --output batch.json --images-dir attachments
 
 Options:
   --outline <path>     Path to outline.md

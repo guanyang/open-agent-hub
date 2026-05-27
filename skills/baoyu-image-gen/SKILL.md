@@ -27,7 +27,7 @@ Concrete `AskUserQuestion` references below are examples — substitute the loca
 
 ## Script Directory
 
-`{baseDir}` = this SKILL.md's directory. Main script: `{baseDir}/scripts/main.ts`. Resolve `${BUN_X}`: prefer `bun`; else `npx -y bun`; else suggest `brew install oven-sh/bun/bun`.
+`{baseDir}` = this SKILL.md's directory. All `scripts/...` paths below are relative to `{baseDir}`. Main script: `{baseDir}/scripts/main.ts`. Batch payload helper: `{baseDir}/scripts/build-batch.ts`. Resolve `${BUN_X}`: prefer `bun`; else `npx -y bun`; else suggest `brew install oven-sh/bun/bun`.
 
 ## Step 0: Load Preferences ⛔ BLOCKING
 
@@ -85,6 +85,10 @@ ${BUN_X} {baseDir}/scripts/main.ts --prompt "A cat" --image out.png --provider o
 ${BUN_X} {baseDir}/scripts/main.ts --prompt "A cat" --image out.png --provider codex-cli --ar 16:9
 
 # Batch mode
+${BUN_X} {baseDir}/scripts/main.ts --batchfile batch.json --jobs 4
+
+# Build a batch file from outline.md + prompts/ (e.g. baoyu-article-illustrator output)
+${BUN_X} {baseDir}/scripts/build-batch.ts --outline outline.md --prompts prompts --output batch.json --images-dir attachments
 ${BUN_X} {baseDir}/scripts/main.ts --batchfile batch.json --jobs 4
 ```
 
@@ -242,7 +246,7 @@ Supported: `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `2.35:1`.
 | One image, or 1-2 simple images | Sequential | Lower coordination overhead, easier debugging |
 | Multiple images with saved prompt files | Batch (`--batchfile`) | Reuses finalized prompts, applies shared throttling/retries, predictable throughput |
 | Each image still needs its own reasoning / prompt writing / style exploration | Subagents | Work is still exploratory, each needs independent analysis |
-| Input is `outline.md` + `prompts/` (e.g. from `baoyu-article-illustrator`) | Batch — use `scripts/build-batch.ts` to assemble the payload | The outline + prompt files already contain everything needed |
+| Input is `outline.md` + `prompts/` (e.g. from `baoyu-article-illustrator`) | Batch — use `{baseDir}/scripts/build-batch.ts` to assemble the payload | The outline + prompt files already contain everything needed |
 
 Rule of thumb: once prompt files are saved and the task is "generate all of these", prefer batch over subagents. Use subagents only when generation is coupled with per-image thinking or divergent creative exploration.
 
