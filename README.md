@@ -1,253 +1,153 @@
-# Antigravity Skills
+# open-agent-hub
 
-[简体中文](README.zh-CN.md) | [English](README.md)
+**English** | [简体中文](README.zh-CN.md)
 
-Empower agents with professional capabilities in specific fields (such as full-stack development, complex logic planning, multimedia processing, etc.) through modular **Skills** definitions, allowing agents to solve complex problems systematically like human experts.
+`open-agent-hub` is a unified local capability management center for AI coding agents (such as Claude Code, Cursor, Codex, Antigravity, etc.). It manages and links various AI agent capability components (such as **Skills** / modular prompting, **Agents** / specialist workflow roles, **Commands** / agent-facing slash commands, and is designed with built-in extensibility to support future capability paradigms) through a zero-dependency local CLI tool.
+
+---
 
 ## 📂 Directory Structure
 
 ```
 .
-├── .claude-plugin/     # Claude plugin configuration files
-├── skills/             # Antigravity Skills library
-│   ├── skill-name/     # Individual skill directory
-│   │   ├── SKILL.md    # Core skill definition and Prompt (Required)
-│   │   ├── scripts/    # Scripts relied upon by the skill (Optional)
-│   │   ├── examples/   # Skill usage examples (Optional)
-│   │   └── resources/  # Templates and resources relied upon by the skill (Optional)
-├── docs/               # User manual and documentation guides
-├── scripts/            # Maintenance scripts
-├── skills_sources.json # Skills synchronization source config
-├── skills_index.json   # Skills metadata index
-├── spec/               # Specification documents
-├── template/           # New skill template
-└── README.md
+├── agents/             # System prompts for expert Agents (agent-*.md)
+├── commands/           # Agent runtime Slash Commands (*.md)
+├── docs/               # Technical specs and user guidelines
+├── scripts/            # CLI manager source code (hub.js)
+├── skills/             # Modular capability skills (83+ skills)
+├── spec/               # Technical specification definitions for capabilities
+├── template/           # Development templates for Skills, Agents, and Commands
+├── AGENTS.md           # Project-level LLM coding guidelines
+├── CLAUDE.md           # Claude-specific coding guidelines
+├── GEMINI.md           # Gemini-specific coding guidelines
+├── CHANGELOG.md        # Changelog of project versions
+├── CONTRIBUTING.md     # Community guidelines for contributions
+├── LICENSE             # MIT license file
+├── SECURITY.md         # Vulnerability reporting policies
+├── package.json        # CLI configuration and npm registration
+├── skills_index.json   # Scanned and generated global metadata index for skills
+├── skills_sources.json # Data sources configuration for `oah sync` command
+├── README.md           # English documentation (this file)
+└── README.zh-CN.md     # Chinese translation documentation
 ```
+*(Note: `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` contain project-level LLM coding behavioral guidelines, derived from [andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills))*
+
+---
+
+## 📖 Technical Guidelines & Documentation
+
+To maintain clean and focused documentation, deep-dive specifications have been moved under the `docs/` directory. Please refer to:
+
+*   🧩 **[Skill Guidelines](docs/Skill_Guidelines.md)**: Design standards, trigger rules, and a complete catalog of the 83+ modular skills.
+*   🤖 **[Agent Guidelines](docs/Agent_Guidelines.md)**: Specifications for Orchestrator, Evaluator, and Optimizer agent roles, detailing handoff contracts and Evaluator-Optimizer loops.
+*   🛠 **[Command Guidelines](docs/Command_Guidelines.md)**: Guidelines for agent-facing slash commands (such as `/commit`, `/review`, and `/test-tdd`).
+
+---
 
 ## 🔌 Compatibility
 
-Antigravity Skills follow the universal **SKILL.md** format and can work seamlessly with any AI coding assistant that supports Agentic Skills:
+`open-agent-hub` follows standardized Markdown prompts with YAML frontmatter metadata. The CLI dynamically links components (Skills, Agents, Commands) to their respective subdirectories (`/skills/`, `/agents/`, `/commands/`) within the project or global configuration directories of the AI assistant:
 
-| Tool Name (Agent) | Type | Compatibility | Project Path | Global Path |
+| Tool Name (Agent) | Type | Compatibility | Project Path (Workspace) | Global Path (System) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Antigravity** | IDE | ✅ Full | `.agent/skills/` | `~/.gemini/antigravity/skills/` |
-| **Claude Code** | CLI | ✅ Full | `.claude/skills/` | `~/.claude/skills/` |
-| **Gemini CLI** | CLI | ✅ Full | `.gemini/skills/` | `~/.gemini/skills/` |
-| **Codex** | CLI | ✅ Full | `.codex/skills/` | `~/.codex/skills/` |
-| **Cursor** | IDE | ✅ Full | `.cursor/skills/` | `~/.cursor/skills/` |
-| **GitHub Copilot** | Extension| ⚠️ Partial | `.github/skills/` | `~/.copilot/skills/` |
-| **OpenCode** | CLI | ✅ Full | `.opencode/skills/` | `~/.config/opencode/skills/` |
-| **Windsurf** | IDE | ✅ Full | `.windsurf/skills/` | `~/.codeium/windsurf/skills/` |
-| **Trae** | IDE | ✅ Full | `.trae/skills/` | `~/.trae/skills/` |
+| **Claude Code** | CLI | ✅ Full | `.claude/` | `~/.claude/` |
+| **Antigravity** | IDE | ✅ Full | `.agent/` | `~/.gemini/antigravity/` |
+| **Gemini CLI** | CLI | ✅ Full | `.gemini/` | `~/.gemini/` |
+| **Codex** | CLI | ✅ Full | `.codex/` | `~/.codex/` |
+| **Cursor** | IDE | ✅ Full | `.cursor/` | `~/.cursor/` |
+| **Trae** | IDE | ✅ Full | `.trae/` | `~/.trae/` |
+| **OpenCode** | CLI | ✅ Full | `.opencode/` | `~/.config/opencode/` |
 
 > [!TIP]
-> Most tools will automatically discover skills in `.agent/skills/`. For maximum compatibility, please clone/copy into this directory.
+> The CLI tool (`oah`) links files into subdirectories under these paths, e.g., `<Path>/skills/` for skills, `<Path>/agents/` for agents, and `<Path>/commands/` for slash commands.
 
-## 📖 Quick Start
+---
 
-### 1. Prepare the Skills Library
-First, clone this repository locally (it is recommended to place it in a fixed location for global reference):
+## 🚀 Quick Start
+
+### 1. Clone the Hub
+Clone this repository locally (it is recommended to place it in a fixed location for global reference):
 ```bash
-git clone https://github.com/guanyang/antigravity-skills.git ~/antigravity-skills
+git clone https://github.com/guanyang/open-agent-hub.git ~/open-agent-hub
 ```
 
-### 2. Install Skills (Symlink Method)
-We strongly recommend using **Symbolic Links (Symlink)** for installation, so that when you update this repository via `git pull`, all tools will automatically sync the latest features.
-
-#### 🔹 Method A: Project Level Installation
-Enable skills only for the current project. Run in your project root:
+### 2. Global Link via CLI
+In the root directory, run the link command to register the CLI manager `open-agent` (with aliases `open-agent-hub`, `oah`, `ahub`):
 ```bash
-mkdir -p .agent/skills
-ln -s ~/antigravity-skills/skills/* .agent/skills/
+cd ~/open-agent-hub
+npm link
 ```
 
-#### 🔹 Method B: Global Level Installation
-Enable skills by default in all projects. Run the corresponding command based on the tool; common examples:
+### 3. Manage Capabilities
+After linking, you can manage your local agent environments from anywhere:
+```bash
+# List all dynamically scanned Skills, Agents, and Commands
+oah list
 
-| Tool Name | Global Installation Command (macOS/Linux) |
-| :--- | :--- |
-| **General** | `mkdir -p ~/.agent/skills && ln -s ~/antigravity-skills/skills/* ~/.agent/skills/` |
-| **Claude Code** | `mkdir -p ~/.claude/skills && ln -s ~/antigravity-skills/skills/* ~/.claude/skills/` |
-| **Antigravity** | `mkdir -p ~/.gemini/antigravity/skills && ln -s ~/antigravity-skills/skills/* ~/.gemini/antigravity/skills/` |
-| **Gemini** | `mkdir -p ~/.gemini/skills && ln -s ~/antigravity-skills/skills/* ~/.gemini/skills/` |
-| **Codex** | `mkdir -p ~/.codex/skills && ln -s ~/antigravity-skills/skills/* ~/.codex/skills/` |
+# Check link status in your current project workspace (default behavior)
+oah status
 
-#### 🔹 Method C: Claude Plugin Installation (Claude Code Only)
-If you primarily use **Claude Code**, you can install with one click via the plugin marketplace (this method automatically handles skill loading):
+# Check link status in global system configurations (e.g. ~/.claude/)
+oah status --global
+
+# Enable a specific component inside the current project workspace
+oah enable canvas-design
+
+# Enable all components (Skills, Agents, Commands) in current project workspace (defaults to all)
+oah enable
+
+# Enable all components in project workspace for Cursor (links to .cursor/)
+oah enable --target=cursor
+
+# Enable all components in project workspace for ALL supported targets
+oah enable --target=all
+
+# Enable all components globally for ALL supported targets
+oah enable --global --target=all
+
+# Enable all components globally (system-level)
+oah enable --global
+
+# Disable all components inside the current project workspace
+oah disable
+```
+
+#### CLI Filters & Options:
+*   **Filters (Passed as the name argument, mutually exclusive):**
+    *   `<name>`: Enable/disable a single component by its name/ID.
+    *   `--skills`: Enable/disable only all Skills components.
+    *   `--agents`: Enable/disable only all Agents components.
+    *   `--commands`: Enable/disable only all Commands components.
+    *   `--all`, `-a`: Enable/disable all Skills, Agents, and Commands (default behavior when no arguments are provided).
+*   **Options:**
+    *   `-p, --project` (default): Project-level activation (links config directories inside your current working directory, e.g. `.claude/`).
+    *   `-g, --global`: System global level activation (e.g., links into user home config folder, like `~/.claude/`).
+    *   `-t, --target <name>`: Target environment to link to (supported: `claude`, `antigravity`, `gemini`, `codex`, `cursor`, `trae`, `opencode` and `all` to configure all of them, default: `claude`).
+
+
+
+## 🔄 Keeping Skills in Sync
+
+Many modular skills in the `skills/` directory originate from active open-source communities. You can sync them with upstream sources using the CLI or the underlying script:
 
 ```bash
-# 1. Start Claude Code
-# 2. Add the plugin marketplace
-/plugin marketplace add guanyang/antigravity-skills
+# Sync all configured sources
+oah sync
 
-# 3. Install the plugin from the marketplace
-/plugin install antigravity-skills@antigravity-skills
+# Sync only a specific source (e.g., anthropics-skills)
+oah sync anthropics-skills
 ```
+*Note: Configured upstream sources are stored in `skills_sources.json`. You can also execute this directly via `./scripts/sync_skills.sh`.*
 
-### 3. Using Skills
-Enter `@[skill-name]` or `/skill-name` in the chat box to invoke them, for example:
-```text
-/canvas-design Help me design a 16:9 blog cover about "Deep Learning"
-```
+---
 
-### 4. More Information
-- **View Manual**: For detailed usage, please refer to [docs/Antigravity_Skills_Manual.en.md](docs/Antigravity_Skills_Manual.en.md).
-- **Environment Dependencies**: Some skills rely on Python environments; please ensure your system has necessary libraries installed (e.g., `pdf2docx`, `pandas`, etc.).
+## 🛡️ Security & Contributing
 
+*   **Security Policy**: Please refer to [SECURITY.md](SECURITY.md) to report vulnerabilities.
+*   **Contributing**: We welcome community contributions for new skills, agents, or commands. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## 🔄 Keeping in Sync
-
-Many skills in this project originate from excellent open-source communities. To keep in sync with upstream repositories, you can update them in the following ways:
-
-1.  **Configuration**: The `skills_sources.json` file in the root directory is pre-configured with the upstream repositories for major skills and usually does not need manual adjustment.
-2.  **Run Sync**:
-    You can choose to sync all skills or just a specific one:
-
-    ```bash
-    # Sync all configured sources
-    ./scripts/sync_skills.sh
-
-    # Sync only a specific source (e.g., anthropics-skills)
-    ./scripts/sync_skills.sh anthropics-skills
-    ```
-    The script will automatically pull the latest code and update the corresponding skill directories.
-
-    > **Note**: The `ui-ux-pro-max` skill has a special directory structure and does not support automatic synchronization via script for now. Please use its official installation command `uipro init --ai antigravity` to install or update.
-
-## 🚀 Integrated Skills (Total: 83)
-
-### 🎨 Creative & Design
-These skills focus on visual expression, UI/UX design, and artistic creation.
-- **`@[algorithmic-art]`**: Create algorithmic and generative art using p5.js code.
-- **`@[canvas-design]`**: Create posters and artworks (PNG/PDF output) based on design philosophies.
-- **`@[json-canvas]`**: Create and edit JSON Canvas files (`.canvas`) with nodes, edges, and groups (commonly used in Obsidian).
-- **`@[frontend-design]`**: Create high-quality, production-grade frontend interfaces and Web components.
-- **`@[ui-ux-pro-max]`**: Professional UI/UX design intelligence, providing full design schemes for colors, fonts, layouts, etc.
-- **`@[web-artifacts-builder]`**: Build complex, modern Web apps (based on React, Tailwind, Shadcn/ui).
-- **`@[theme-factory]`**: Generate matching themes for documents, slides, HTML, etc.
-- **`@[brand-guidelines]`**: Apply Anthropic's official brand design specifications (colors, typography, etc.).
-- **`@[remotion]`**: Best practices for Remotion - Video creation in React.
-- **`@[web-design-guidelines]`**: Review UI code for Web Interface Guidelines compliance (accessibility, UX, design audit).
-- **`@[slack-gif-creator]`**: Create high-quality animated GIFs optimized specifically for Slack.
-- **`@[baoyu-infographic]`**: Generate professional infographics with various layouts and styles.
-- **`@[baoyu-diagram]`**: Generate structured diagrams from content.
-- **`@[baoyu-imagine]`**: AI image generation wrapper for Midjourney or similar.
-- **`@[baoyu-image-gen]`**: [Deprecated: use `@[baoyu-imagine]`] AI image generation with multiple APIs.
-
-### 📢 Content & Publishing
-These skills focus on content generation, formatting, and publishing to social media.
-- **`@[baoyu-xhs-images]`**: Xiaohongshu image card series generator with styles and layouts.
-- **`@[baoyu-post-to-wechat]`**: Publish content to WeChat Official Account.
-- **`@[baoyu-post-to-weibo]`**: Publish content to Weibo.
-- **`@[baoyu-post-to-x]`**: Publish content to X (Twitter).
-- **`@[baoyu-cover-image]`**: Generate professional cover images.
-- **`@[baoyu-slide-deck]`**: Generate presentation slide decks.
-- **`@[baoyu-comic]`**: Generate comic strips from content.
-- **`@[baoyu-article-illustrator]`**: Generate illustrations for articles.
-- **`@[baoyu-image-cards]`**: Generates infographic image card series with multiple styles and layouts (optimized for social media).
-
-### 🛠️ Development & Engineering
-These skills cover the full lifecycle of coding, testing, debugging, and code review.
-- **`@[composition-patterns]`**: React composition patterns for building scalable, flexible component libraries.
-- **`@[react-best-practices]`**: Vercel's official React and Next.js performance optimization guidelines.
-- **`@[react-native-skills]`**: React Native and Expo best practices for performant mobile apps.
-- **`@[supabase-postgres-best-practices]`**: Postgres performance optimization and best practices from Supabase.
-- **`@[test-driven-development]`**: Test-Driven Development (TDD) - write tests before implementation code.
-- **`@[systematic-debugging]`**: Systematic debugging for resolving bugs, test failures, or abnormal behaviors.
-- **`@[webapp-testing]`**: Use Playwright for interactive testing and verification of local web applications.
-- **`@[receiving-code-review]`**: Handle code review feedback using technical verification rather than blind modification.
-- **`@[requesting-code-review]`**: Proactively initiate code reviews to verify code quality before merging or completion.
-- **`@[finishing-a-development-branch]`**: Guide the finalization of a development branch (merges, PRs, cleanups, etc.).
-- **`@[subagent-driven-development]`**: Coordinate multiple sub-agents to perform independent development tasks in parallel.
-- **`@[claude-api]`**: Build apps with the Claude API or Anthropic SDK (Python, TypeScript, Java, Go, etc.).
-- **`@[baoyu-electron-extract]`**: Extracts resources and source code from installed Electron apps, restoring files from source maps when available.
-
-### 📄 Documentation & Office
-These skills are used for handling professional documents and office needs in various formats.
-- **`@[doc-coauthoring]`**: Guide users through collaborative writing of structured documents (proposals, tech specs, etc.).
-- **`@[obsidian-markdown]`**: Create and edit Obsidian Flavored Markdown with wikilinks, embeds, callouts, and properties.
-- **`@[obsidian-bases]`**: Create and edit Obsidian Bases (`.base`) files with views, filters, formulas, and summaries.
-- **`@[obsidian-cli]`**: Interact with Obsidian vaults using the Obsidian CLI to read, create, search, and manage notes from the command line.
-- **`@[defuddle]`**: Extract clean markdown content from web pages using Defuddle CLI, removing clutter and navigation.
-- **`@[docx]`**: Create, edit, and analyze Word documents.
-- **`@[xlsx]`**: Create, edit, and analyze Excel spreadsheets (supporting formulas and charts).
-- **`@[pptx]`**: Create and modify PowerPoint presentations.
-- **`@[pdf]`**: Process PDF documents, including extracting text/tables, merging/splitting, and filling forms.
-- **`@[internal-comms]`**: Draft various corporate internal communication documents (weekly reports, announcements, FAQs, etc.).
-- **`@[notebooklm]`**: Query Google NotebookLM notebooks for definitive, document-grounded answers.
-- **`@[baoyu-youtube-transcript]`**: Fetch and process YouTube video transcripts.
-- **`@[baoyu-url-to-markdown]`**: Convert web page content to clean Markdown.
-- **`@[baoyu-format-markdown]`**: Format and clean up Markdown files.
-- **`@[baoyu-markdown-to-html]`**: Convert Markdown to styled HTML.
-- **`@[baoyu-translate]`**: High-quality translation for articles and content.
-- **`@[baoyu-compress-image]`**: Compress and optimize images.
-- **`@[baoyu-danger-gemini-web]`**: Web automation or scraping using Gemini (experimental).
-- **`@[baoyu-danger-x-to-markdown]`**: Convert X (Twitter) threads to Markdown.
-- **`@[baoyu-wechat-summary]`**: Summarize WeChat group chat highlights and topics into structured digests with participant statistics and user profiles.
-
-
-### 📅 Planning & Workflow
-These skills help optimize workflows, task planning, and execution efficiency.
-- **`@[brainstorming]`**: Brainstorm before starting any work to clarify requirements and design.
-- **`@[writing-plans]`**: Write detailed execution plans (Specs) for complex multi-step tasks.
-- **`@[planning-with-files]`**: A file-based planning system (Manus-style) suitable for complex tasks.
-- **`@[executing-plans]`**: Execute existing implementation plans with checkpoints and review mechanisms.
-- **`@[using-git-worktrees]`**: Create isolated Git worktrees for parallel development or task switching.
-- **`@[verification-before-completion]`**: Run verification commands to ensure concrete evidence before declaring task completion.
-- **`@[using-superpowers]`**: Guide users to discover and use these advanced skills.
-
-### 🧠 Core Cognition & Architecture
-These skills build the agent's mental models, memory systems, and context management capabilities.
-- **`@[bdi-mental-states]`**: Simulate Agent's Belief-Desire-Intention (BDI) models.
-- **`@[memory-systems]`**: Build long-term memory and entity tracking systems based on knowledge graphs or vectors.
-- **`@[context-fundamentals]`**: Understand and debug fundamental issues like context windows and attention mechanisms.
-- **`@[context-optimization]`**: Optimize context efficiency to reduce Token costs via KV-cache or partitioning.
-- **`@[context-compression]`**: Implement context compression and summarization to handle long window limits.
-- **`@[context-degradation]`**: Diagnose and fix context degradation issues like "lost in the middle".
-- **`@[filesystem-context]`**: Utilize the filesystem for dynamic context offloading and management.
-- **`@[latent-briefing]`**: Share memory across agents at the representation level using KV cache compaction and Attention Matching.
-
-### 📐 System Design & Evaluation
-These skills focus on architectural design, tool building, and quality assessment of AI systems.
-- **`@[project-development]`**: Full lifecycle design of LLM projects, including task-model matching and pipeline architecture.
-- **`@[tool-design]`**: Design efficient and clear agent tool interfaces and MCP protocols.
-- **`@[evaluation]`**: Establish multi-dimensional agent performance evaluation systems and quality gates.
-- **`@[advanced-evaluation]`**: Implement advanced evaluation methods like LLM-as-a-Judge and pairwise comparison.
-- **`@[harness-engineering]`**: Design control systems and boundaries for autonomous agent loops, including evaluation scaffolds, durable logging, and safety gates.
-
-### 🧩 System Extension
-These skills allow me to extend my own capability boundaries.
-- **`@[mcp-builder]`**: Build MCP (Model Context Protocol) servers to connect external tools and data.
-- **`@[skill-creator]`**: Create new skills or update existing ones to expand my knowledge base and workflows.
-- **`@[writing-skills]`**: A subset of tools to assist in writing, editing, and verifying skill files.
-- **`@[dispatching-parallel-agents]`**: Dispatch parallel tasks to multiple agents for processing.
-- **`@[multi-agent-patterns]`**: Design advanced multi-agent collaboration patterns like Supervisor or Swarm.
-- **`@[hosted-agents]`**: Build and deploy sandboxed, persistently running background agents.
-
-## 🌟 Credits & Sources
-
-This project integrates core ideas or skill implementations from the following excellent open-source projects. Respect to the original authors:
-
-- **[Anthropic Skills](https://github.com/anthropics/skills)**: Official API usage paradigms and skill definition references provided by Anthropic.
-- **[UI/UX Pro Max Skills](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)**: Top-tier UI/UX design intelligence, providing full design schemes for colors, layouts, etc.
-- **[Superpowers](https://github.com/obra/superpowers)**: A toolkit and workflow inspiration aimed at giving LLMs "superpowers."
-- **[Planning with Files](https://github.com/OthmanAdi/planning-with-files)**: Implements a Manus-style file-based task planning system to enhance persistent memory for complex tasks.
-- **[NotebookLM](https://github.com/PleasePrompto/notebooklm-skill)**: Knowledge retrieval and Q&A skill implementation based on Google NotebookLM.
-- **[Agent-Skills-for-Context-Engineering](https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering)**: In-depth Context Engineering skills covering compression, optimization, and degradation handling.
-- **[Obsidian Skills](https://github.com/kepano/obsidian-skills)**: Professional Obsidian integration skills, including JSON Canvas and enhanced Markdown support.
-- **[Remotion Skills](https://github.com/remotion-dev/skills)**: Official Remotion skills for AI agents to create videos programmatically.
-- **[Vercel Agent Skills](https://github.com/vercel-labs/agent-skills)**: Official Vercel skills for React best practices, composition patterns, and web design guidelines.
-- **[Supabase Agent Skills](https://github.com/supabase/agent-skills)**: Official Supabase skills for Postgres performance optimization and best practices.
-- **[Baoyu Skills](https://github.com/JimLiu/baoyu-skills)**: A collection of skills for content generation, publishing, and daily efficiency, including XHS image generator, infographic generator, and content converters.
-
-## 🛡️ Security Policy
-
-We take security seriously. Please refer to our [Security Policy](SECURITY.md) for information on supported versions and how to report vulnerabilities safely.
-
-## 🤝 How to Contribute
-
-We welcome contributions! Please refer to our **[CONTRIBUTING.md](CONTRIBUTING.md)** for detailed guidelines on how to add new skills, improve documentation, and report issues.
+---
 
 ## 📄 License
 
-This project is open-sourced under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE).

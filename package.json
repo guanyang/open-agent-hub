@@ -1,0 +1,24 @@
+{
+  "name": "open-agent-hub",
+  "version": "1.0.0",
+  "description": "Unified capability management center for Skills, Agents, and Commands.",
+  "main": "scripts/hub.js",
+  "bin": {
+    "open-agent": "./scripts/hub.js",
+    "open-agent-hub": "./scripts/hub.js",
+    "oah": "./scripts/hub.js",
+    "ahub": "./scripts/hub.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 0"
+  },
+  "keywords": [
+    "agent",
+    "skills",
+    "cli",
+    "hub",
+    "claude-code"
+  ],
+  "author": "guanyang",
+  "license": "MIT"
+}

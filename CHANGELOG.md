@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v3.0.0] - 2026-06-08
+### Added
+- **LLM Coding Guidelines**: Added project-level coding guidelines `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` derived from `andrej-karpathy-skills`.
+- **Specialist Agents & Slash Commands**: Added Specialist Agent system prompts (`agents/`) and runtime Slash Commands (`commands/`, e.g., `/commit`, `/review`, `/test-tdd`).
+- **Support for Multi-target Configuration**: Added `--target=all` / `-t all` option in `oah` CLI tool to link/unlink components to all supported targets in a single command.
+- **Support for Codex Plugin**: Added `.codex-plugin/` plugin configuration for Codex ecosystem.
+
+### Changed
+- **CLI Default Behavior**: Removed mandatory `--all` parameter from `enable` and `disable` commands. If no target component name is provided, it defaults to handling all components.
+- **Parameter Refactoring**: Renamed `--tool` option to `--target` (`-t`) to clearly define the boundary between Target Host Environments and inside-agent Tools (Skills). Supported compatibility aliases like `--assistant`, `--host`, and `--tool`.
+- **Cli Status Improvements**: Enhanced status command output to automatically filter out unlinked components in multi-target (`all`) mode to prevent terminal clutter.
+- **IDE Support**: Replaced Windsurf and GitHub Copilot support with full support for Trae, OpenCode, and Codex.
+- **Renamed Claude Plugin**: Updated Claude plugin configuration (`.claude-plugin/`) to match project metadata of `open-agent-hub`.
+
 ## [v2.4.0] - 2026-05-11
 ### Added
 - **21 New Skills (Baoyu Skills & Claude API)**:
