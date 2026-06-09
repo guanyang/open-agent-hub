@@ -1,0 +1,20 @@
+{
+    "name": "open-agent-hub",
+    "interface": {
+        "displayName": "Open Agent Hub"
+    },
+    "plugins": [
+        {
+            "name": "open-agent-hub",
+            "source": {
+                "source": "local",
+                "path": "./"
+            },
+            "policy": {
+                "installation": "AVAILABLE",
+                "authentication": "ON_INSTALL"
+            },
+            "category": "Productivity"
+        }
+    ]
+}
