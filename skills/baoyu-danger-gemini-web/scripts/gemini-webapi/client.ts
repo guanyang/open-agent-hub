@@ -456,19 +456,19 @@ export class GeminiClient extends GemMixin {
           const generated_images: GeneratedImage[] = [];
           const wants_generated =
             get_nested_value(candidate, [12, 7, 0], null) != null ||
-            /http:\/\/googleusercontent\.com\/image_generation_content\/\d+/.test(text);
+            /http:\/\/googleusercontent\.com\/image_generation_content\/\d+/.test(text) ||
+            // Gemini 3 no longer emits the legacy marker in the candidate text; the generated
+            // image arrives in a later response part. Detect it from the raw response instead.
+            /\/gg-dl\//.test(txt) ||
+            /image_generation_content\/\d+/.test(txt);
 
           if (wants_generated) {
             const image_part = find_generated_image_part(response_json as unknown[], body_index, candidate_index, 1);
             const img_body = image_part?.body ?? null;
 
-            if (!img_body) {
-              throw new ImageGenerationError(
-                'Failed to parse generated images. Please update gemini_webapi to the latest version. If the error persists and is caused by the package, please report it on GitHub.',
-              );
-            }
-
-            const img_candidate = get_nested_value<unknown[]>(img_body, [4, candidate_index], []);
+            // Not every candidate carries a generated image (e.g. multi-candidate responses).
+            // If this candidate has no image part, skip extraction instead of failing the whole call.
+            const img_candidate = img_body ? get_nested_value<unknown[]>(img_body, [4, candidate_index], []) : [];
             const finished = get_nested_value<string | null>(img_candidate, [1, 0], null);
             if (finished) {
               text = finished.replace(/http:\/\/googleusercontent\.com\/image_generation_content\/\d+/g, '').trimEnd();
