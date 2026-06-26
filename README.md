@@ -66,20 +66,38 @@ To maintain clean and focused documentation, deep-dive specifications have been 
 
 ## 🚀 Quick Start
 
-### 1. Clone the Hub
+You can install and manage skills either directly using Vercel's standard `skills` CLI, or via our built-in zero-dependency manager (`oah`) which also supports managing Agents and Slash Commands.
+
+### Option 1: Quick Install via Vercel's `skills` CLI (Easiest)
+
+If you only need to use the modular **Skills** and are using a compatible agent (like Claude Code, Cursor, etc.), you can use Vercel's official `skills` CLI to install them directly from this repository without cloning:
+
+```bash
+# Add all skills from this repository
+npx skills@latest add guanyang/open-agent-hub
+
+# Add a specific skill (e.g., remotion)
+npx skills@latest add guanyang/open-agent-hub --skill remotion
+```
+
+### Option 2: Clone and use the built-in CLI (`oah`)
+
+If you want to manage **Skills, Agents, and Slash Commands** dynamically via local symlinks, or if you want to sync upstream sources, you can clone the repository and use our CLI tool:
+
+#### 1. Clone the Hub
 Clone this repository locally (it is recommended to place it in a fixed location for global reference):
 ```bash
 git clone https://github.com/guanyang/open-agent-hub.git ~/open-agent-hub
 ```
 
-### 2. Global Link via CLI
+#### 2. Global Link via CLI
 In the root directory, run the link command to register the CLI manager `open-agent` (with aliases `open-agent-hub`, `oah`, `ahub`):
 ```bash
 cd ~/open-agent-hub
 npm link
 ```
 
-### 3. Manage Capabilities
+#### 3. Manage Capabilities
 After linking, you can manage your local agent environments from anywhere:
 ```bash
 # List all dynamically scanned Skills, Agents, and Commands

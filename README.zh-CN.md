@@ -66,20 +66,38 @@
 
 ## 🚀 快速开始
 
-### 1. 克隆仓库
+你可以直接使用 Vercel 官方标准的 `skills` CLI 工具安装本仓库的技能，也可以通过克隆仓库并使用内置的零依赖管理工具 (`oah`) 来一键管理 Skills、Agents 和 Slash Commands。
+
+### 方式一：使用 Vercel 的 `skills` CLI 快速安装 (最简便)
+
+如果你仅需要使用本仓库的**模块化技能 (Skills)**，且正在使用与之兼容的 AI 助手（如 Claude Code、Cursor 等），你可以直接使用 Vercel 官方的 `skills` 命令行工具从本仓库进行拉取，无需克隆整套代码：
+
+```bash
+# 安装本仓库中所有的技能到项目中
+npx skills@latest add guanyang/open-agent-hub
+
+# 仅安装某个特定技能 (例如 remotion 技能)
+npx skills@latest add guanyang/open-agent-hub --skill remotion
+```
+
+### 方式二：克隆并使用内置的 CLI 工具 (`oah`)
+
+如果你需要动态管理本仓库的 **Skills（技能）、Agents（角色）和 Slash Commands（快捷指令）**（例如通过本地软链接激活），或者需要从上游同步更新技能源，你可以克隆本仓库并使用 `oah` 工具：
+
+#### 1. 克隆仓库
 首先将本仓库克隆到本地（建议放在一个固定位置以便全局引用）：
 ```bash
 git clone https://github.com/guanyang/open-agent-hub.git ~/open-agent-hub
 ```
 
-### 2. 全局链接 CLI 工具
+#### 2. 全局链接 CLI 工具
 在克隆的项目根目录下运行以下命令，注册全局可执行命令 `open-agent`（同时支持别名 `open-agent-hub`、`oah`、`ahub`）：
 ```bash
 cd ~/open-agent-hub
 npm link
 ```
 
-### 3. 一键管理能力
+#### 3. 一键管理能力
 链接成功后，你可以在系统任何地方使用命令行轻松管理和配置本地的 AI 助手环境：
 ```bash
 # 列出本地所有已扫描到的 Skills、Agents 与 Commands
