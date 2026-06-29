@@ -136,6 +136,21 @@ function highlightCode(code: string, lang: string): string {
   }
 }
 
+// Normalize CJK-adjacent emphasis so `marked` renders it correctly.
+//
+// `marked`'s emphasis tokenizer treats a closing `**`/`*` directly followed by a
+// CJK character as not right-flanking, so it leaves the delimiters literal
+// (e.g. `**加粗**这` renders as plain text with the asterisks intact). We round-trip
+// the markdown through `remark-cjk-friendly`, whose stringify serializes the
+// boundary character as an HTML entity (`&#x8FD9;`); the entity is treated as
+// punctuation by `marked`'s flanking rules, so emphasis parses as expected.
+//
+// We deliberately do NOT decode the entities afterward. They are valid HTML
+// character references that render correctly when the article HTML is pasted into
+// the X editor, and `marked` only emits them for characters outside the emphasis
+// span (the boundary char), never inside it. A blanket decode of the rendered
+// HTML would risk turning author-written literal entities (e.g. `&#x3C;b&#x3E;`
+// meant to display `<b>` as text) into real tags, so we leave them intact.
 function preprocessCjkMarkdown(markdown: string): string {
   try {
     const processor = unified()
@@ -143,8 +158,7 @@ function preprocessCjkMarkdown(markdown: string): string {
       .use(remarkCjkFriendly)
       .use(remarkStringify);
 
-    const result = String(processor.processSync(markdown));
-    return result.replace(/&#x([0-9A-Fa-f]+);/g, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)));
+    return String(processor.processSync(markdown));
   } catch {
     return markdown;
   }
