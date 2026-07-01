@@ -492,6 +492,12 @@
     "description": "Use when creating new skills, editing existing skills, or verifying skills work before deployment"
   },
   {
+    "id": "x-twitter-scraper",
+    "path": "skills/x-twitter-scraper",
+    "name": "x-twitter-scraper",
+    "description": "Use when a workflow needs X/Twitter data extraction, account monitoring, webhook delivery, MCP access, or confirmation-gated posting through Xquik."
+  },
+  {
     "id": "xlsx",
     "path": "skills/xlsx",
     "name": "xlsx",
