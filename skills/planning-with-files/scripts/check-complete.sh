@@ -97,6 +97,13 @@ if [ "$PENDING_INLINE" -gt "$PENDING_PRIMARY" ]; then PENDING="$PENDING_INLINE";
 : "${IN_PROGRESS:=0}"
 : "${PENDING:=0}"
 
+# issue #191: no "### Phase" headings -> not a phase-structured plan. Report
+# nothing rather than a false "0/0 phases complete" status. With TOTAL=0 the
+# gate can never legitimately block (IN_PROGRESS is also 0), so exit is safe.
+if [ "$TOTAL" -eq 0 ]; then
+    exit 0
+fi
+
 # advisory_report: the v2.43 status echo. Always exit 0 after calling.
 advisory_report() {
     if [ "$COMPLETE" -eq "$TOTAL" ] && [ "$TOTAL" -gt 0 ]; then

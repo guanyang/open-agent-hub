@@ -73,6 +73,13 @@ $COMPLETE = [Math]::Max($completePrimary, $completeInline)
 $IN_PROGRESS = [Math]::Max($inProgressPrimary, $inProgressInline)
 $PENDING = [Math]::Max($pendingPrimary, $pendingInline)
 
+# issue #191: no "### Phase" headings -> not a phase-structured plan. Report
+# nothing rather than a false "0/0 phases complete" status. With TOTAL=0 the
+# gate can never legitimately block (IN_PROGRESS is also 0), so exit is safe.
+if ($TOTAL -eq 0) {
+    exit 0
+}
+
 # advisory_report: the v2.43 status echo.
 function Write-AdvisoryReport {
     if ($COMPLETE -eq $TOTAL -and $TOTAL -gt 0) {
