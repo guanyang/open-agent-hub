@@ -24,13 +24,42 @@ ACTIVE_FILE="${PLAN_ROOT}/.active_plan"
 # "feature-foo". The intent is to filter garbage content (e.g. a corrupt
 # .active_plan file containing only whitespace or random text) without
 # enforcing a date prefix that would break backward compatibility.
-SLUG_RE='^[A-Za-z0-9_][A-Za-z0-9._-]*$'
-
+# Pure-sh case patterns; semantics match the previous
+# grep -E '^[A-Za-z0-9_][A-Za-z0-9._-]*$' exactly, without a grep fork per
+# candidate (the newest-mtime scan calls this once per plan dir).
 slug_is_valid() {
     case "$1" in
         '') return 1 ;;
+        *[!A-Za-z0-9._-]*) return 1 ;;
+        [A-Za-z0-9_]*) return 0 ;;
     esac
-    printf "%s" "$1" | grep -Eq "${SLUG_RE}"
+    return 1
+}
+
+# Pure-sh backslash-to-forward-slash normalizer; result lands in $NORM_OUT.
+# Windows-native coreutils builds (e.g. C:\Program Files\coreutils on PATH
+# ahead of Git's usr/bin) canonicalize MSYS-style /c/... input to C:\-style
+# backslash output. The containment prefix match below is written with forward
+# slashes, so without this normalization every canonical pair mismatches and
+# resolution silently fails. On POSIX systems paths contain no backslash and
+# this is the identity. A literal backslash in a Unix filename normalizes to
+# "/" and at worst fails containment — the safe direction. No subshell, no
+# fork: plain parameter expansion in a loop.
+norm_slashes() {
+    NORM_OUT=""
+    _ns_rest="$1"
+    while :; do
+        case "${_ns_rest}" in
+            *\\*)
+                NORM_OUT="${NORM_OUT}${_ns_rest%%\\*}/"
+                _ns_rest="${_ns_rest#*\\}"
+                ;;
+            *)
+                NORM_OUT="${NORM_OUT}${_ns_rest}"
+                break
+                ;;
+        esac
+    done
 }
 
 # Portable path canonicalizer. realpath first (Linux, modern coreutils),
@@ -63,21 +92,50 @@ canonicalize() {
 # path under the project root (the CWD the script runs from). A symlink inside
 # a valid slug dir pointing at /etc or outside the workspace would otherwise let
 # the hooks hash and inject an arbitrary file. On any violation we return 1 so
-# the caller treats the candidate as unresolved and falls back safely. If
-# canonicalization is unavailable for BOTH paths we fail open (return 0) to keep
-# legacy behavior byte-equivalent on minimal shells that lack realpath/readlink
-# and python; the SLUG_RE check already blocks traversal in the slug name.
+# the caller treats the candidate as unresolved and falls back safely.
+#
+# The root canonicalizes via the relative token "." rather than the $PWD
+# string. On some Windows/MSYS setups (8.3 short names, the /tmp mount alias)
+# realpath("$PWD") and realpath(relative-candidate) resolve through different
+# code paths and land on differently-spelled-but-equal targets, so the prefix
+# match below fails and resolution silently goes dark. "." resolves through
+# the same physical-cwd path candidates already use (same fix inject-plan.sh
+# received earlier; the resolver kept the $PWD form until now). Both sides are
+# backslash-normalized before comparison for Windows-native canonicalizers.
+# The root is computed once per run: the newest-mtime scan calls this guard
+# per plan dir, and each canonicalize costs a process spawn on Windows.
+ROOT_REAL=""
+ROOT_REAL_SET=0
 is_within_root() {
     candidate="$1"
-    root_real="$(canonicalize "${PWD}")" || root_real=""
-    cand_real="$(canonicalize "${candidate}")" || cand_real=""
-    if [ -z "${root_real}" ] || [ -z "${cand_real}" ]; then
+    if [ "${ROOT_REAL_SET}" = "0" ]; then
+        ROOT_REAL="$(canonicalize ".")" || ROOT_REAL=""
+        norm_slashes "${ROOT_REAL}"
+        ROOT_REAL="${NORM_OUT}"
+        ROOT_REAL_SET=1
+    fi
+    # Canonicalize the candidate through its cwd-RELATIVE form whenever it
+    # lives under ${PWD}. The candidate string is built from ${PWD} (an MSYS
+    # long-form spelling), while the root canonicalizes from "." (the process
+    # cwd, which a caller may have set with an 8.3 short-form string). A
+    # Windows-native realpath does not unify those spellings, so canonicalizing
+    # both sides from the same cwd base is the only spelling-stable comparison.
+    # The emitted result keeps the original absolute candidate — only the
+    # containment check uses the relative form.
+    case "${candidate}" in
+        "${PWD}"/*) check_target=".${candidate#"${PWD}"}" ;;
+        *) check_target="${candidate}" ;;
+    esac
+    cand_real="$(canonicalize "${check_target}")" || cand_real=""
+    norm_slashes "${cand_real}"
+    cand_real="${NORM_OUT}"
+    if [ -z "${ROOT_REAL}" ] || [ -z "${cand_real}" ]; then
         # Slug validation blocks textual traversal, but only successful
         # canonicalization can rule out a symlink/junction escape.
         return 1
     fi
     case "${cand_real}" in
-        "${root_real}"|"${root_real}"/*) return 0 ;;
+        "${ROOT_REAL}"|"${ROOT_REAL}"/*) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -145,7 +203,7 @@ resolve_latest_dir() {
     for entry in "${PLAN_ROOT}"/*/; do
         [ -d "${entry}" ] || continue
         clean="${entry%/}"
-        name="$(basename "${clean}")"
+        name="${clean##*/}"
         case "${name}" in
             .*) continue ;;
         esac

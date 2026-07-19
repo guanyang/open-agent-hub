@@ -32,8 +32,45 @@ for arg in "$@"; do
     esac
 done
 
-SLUG_RE='^[A-Za-z0-9_][A-Za-z0-9._-]*$'
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd 2>/dev/null)" || SCRIPT_DIR="."
+
+# Plan-id safe-identifier check. Pure-sh case patterns; semantics match the
+# previous grep -E '^[A-Za-z0-9_][A-Za-z0-9._-]*$' exactly, without a grep
+# fork per candidate. (Shared shape with resolve-plan-dir.sh.)
+slug_is_valid() {
+    case "$1" in
+        '') return 1 ;;
+        *[!A-Za-z0-9._-]*) return 1 ;;
+        [A-Za-z0-9_]*) return 0 ;;
+    esac
+    return 1
+}
+
+# Pure-sh backslash-to-forward-slash normalizer; result lands in $NORM_OUT.
+# Windows-native coreutils builds (e.g. C:\Program Files\coreutils on PATH
+# ahead of Git's usr/bin) canonicalize MSYS-style /c/... input to C:\-style
+# backslash output. The containment prefix match below is written with forward
+# slashes, so without this normalization every canonical pair mismatches and
+# injection silently goes dark. On POSIX systems paths contain no backslash
+# and this is the identity. A literal backslash in a Unix filename normalizes
+# to "/" and at worst fails containment — the safe direction. No subshell, no
+# fork: plain parameter expansion in a loop.
+norm_slashes() {
+    NORM_OUT=""
+    _ns_rest="$1"
+    while :; do
+        case "${_ns_rest}" in
+            *\\*)
+                NORM_OUT="${NORM_OUT}${_ns_rest%%\\*}/"
+                _ns_rest="${_ns_rest#*\\}"
+                ;;
+            *)
+                NORM_OUT="${NORM_OUT}${_ns_rest}"
+                break
+                ;;
+        esac
+    done
+}
 
 # Portable path canonicalizer. realpath first (Linux, modern coreutils),
 # then readlink -f (older GNU), then python3/python os.path.realpath. Prints
@@ -79,8 +116,15 @@ is_within_root() {
     # different code paths and land on differently-spelled-but-equal targets,
     # so the prefix match below fails and injection silently goes dark. "."
     # resolves through the same physical-cwd path candidates already use.
+    # Both sides are backslash-normalized before comparison: Windows-native
+    # canonicalizers emit C:\-style paths that a forward-slash prefix pattern
+    # can never match.
     root_real="$(canonicalize ".")" || root_real=""
+    norm_slashes "${root_real}"
+    root_real="${NORM_OUT}"
     cand_real="$(canonicalize "${candidate}")" || cand_real=""
+    norm_slashes "${cand_real}"
+    cand_real="${NORM_OUT}"
     if [ -z "${root_real}" ] || [ -z "${cand_real}" ]; then
         return 0
     fi
@@ -94,20 +138,20 @@ is_within_root() {
 #     dispatch needs only one script on disk to function). ---
 RESOLVED=""
 SCOPE=""
-if [ -n "${PLAN_ID:-}" ] && printf "%s" "$PLAN_ID" | grep -Eq "$SLUG_RE" && [ -d ".planning/${PLAN_ID}" ]; then
+if [ -n "${PLAN_ID:-}" ] && slug_is_valid "$PLAN_ID" && [ -d ".planning/${PLAN_ID}" ]; then
     RESOLVED=".planning/${PLAN_ID}"; SCOPE="scoped"
 elif [ -f .planning/.active_plan ]; then
     AP=$(tr -d '\r\n[:space:]' < .planning/.active_plan 2>/dev/null)
-    if [ -n "$AP" ] && printf "%s" "$AP" | grep -Eq "$SLUG_RE" && [ -d ".planning/${AP}" ]; then
+    if [ -n "$AP" ] && slug_is_valid "$AP" && [ -d ".planning/${AP}" ]; then
         RESOLVED=".planning/${AP}"; SCOPE="scoped"
     fi
 fi
 if [ -z "$RESOLVED" ] && [ -d .planning ]; then
     NEWEST=""; NEWEST_MT=0
     for d in .planning/*/; do
-        d="${d%/}"; n=$(basename "$d")
+        d="${d%/}"; n="${d##*/}"
         case "$n" in .*) continue;; esac
-        printf "%s" "$n" | grep -Eq "$SLUG_RE" || continue
+        slug_is_valid "$n" || continue
         [ -f "$d/task_plan.md" ] || continue
         m=$(stat -c '%Y' "$d" 2>/dev/null || stat -f '%m' "$d" 2>/dev/null || date -r "$d" +%s 2>/dev/null || echo 0)
         if [ "$m" -gt "$NEWEST_MT" ] 2>/dev/null; then NEWEST_MT="$m"; NEWEST="$d"; fi
