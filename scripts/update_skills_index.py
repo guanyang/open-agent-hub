@@ -67,6 +67,7 @@ def update_index():
     try:
         with open(index_path, "w", encoding="utf-8") as f:
             json.dump(skills, f, indent=2, ensure_ascii=False)
+            f.write("\n")
         print(f"Successfully updated {index_path} with {len(skills)} skills.")
     except Exception as e:
         print(f"Error writing to {index_path}: {e}")
