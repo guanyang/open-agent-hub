@@ -130,7 +130,9 @@ if ($validEvents -notcontains $Event) {
 $agentClean = ($Agent -replace '[^A-Za-z0-9_-]', '')
 if (-not $agentClean) { $agentClean = "main" }
 
-# Truncate summary to 200 chars before escaping.
+# Truncate summary to the 200-character budget before escaping, matching the
+# sh twin. .NET Substring counts characters, never bytes, so multibyte input
+# cannot be clipped mid-codepoint here and no UTF-8 tail repair is needed.
 if ($Summary.Length -gt 200) { $Summary = $Summary.Substring(0, 200) }
 
 $planDir    = Resolve-PlanDir

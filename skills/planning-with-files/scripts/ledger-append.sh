@@ -16,7 +16,8 @@
 #
 # Arguments:
 #   <event>    one of: progress phase_complete error gate_block attest note
-#   <summary>  free text, truncated to 200 chars, newlines stripped
+#   <summary>  free text, truncated to 200 chars, kept valid UTF-8,
+#              newlines stripped
 #
 # Options:
 #   --agent NAME      ledger owner (default "main"); sanitized to [A-Za-z0-9_-]
@@ -76,6 +77,104 @@ json_escape() {
     printf '%s' "$1" \
         | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
         | tr '\001-\037' ' '
+}
+
+# Emit $1 with any trailing incomplete UTF-8 sequence removed. GNU cut -c
+# counts BYTES, so the 200 truncation below can clip a multibyte character and
+# leave a tail that strict UTF-8 readers reject, poisoning the whole JSONL
+# line. Preferred path: iconv -c drops every malformed byte (glibc, BSD/macOS,
+# Git for Windows all ship it); its output is used whenever non-empty because
+# GNU libiconv exits nonzero even after -c repaired the tail. Fallback: read
+# the last <=4 bytes with od, count trailing continuation bytes (128-191),
+# compare against the lead byte's declared length, drop the trailing character
+# only when it is incomplete. A complete multibyte character at the boundary
+# survives both paths. The fallback repairs truncation damage only; input that
+# was invalid UTF-8 before truncation passes through unchanged.
+utf8_trim_incomplete() {
+    str="$1"
+    if [ -z "${str}" ]; then
+        return 0
+    fi
+    if command -v iconv >/dev/null 2>&1; then
+        cleaned="$(printf '%s' "${str}" | iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || true)"
+        if [ -n "${cleaned}" ]; then
+            printf '%s' "${cleaned}"
+            return 0
+        fi
+        # Empty output for non-empty input: iconv missing the -c flag
+        # (busybox) or a hard failure. Fall through to the byte-level trim.
+    fi
+    # The byte-level trim needs od, dd, and wc. On a PATH without them the
+    # string passes through unchanged, the pre-repair behavior: an append
+    # must never fail or lose the whole summary because a repair tool is
+    # missing.
+    if ! command -v od >/dev/null 2>&1 || ! command -v dd >/dev/null 2>&1; then
+        printf '%s' "${str}"
+        return 0
+    fi
+    # tr -cd normalizes BSD wc padding and yields empty when wc is absent.
+    nbytes="$(printf '%s' "${str}" | wc -c 2>/dev/null | tr -cd '0-9')"
+    if [ -z "${nbytes}" ] || [ "${nbytes}" -le 0 ]; then
+        printf '%s' "${str}"
+        return 0
+    fi
+    win=4
+    if [ "${nbytes}" -lt 4 ]; then
+        win="${nbytes}"
+    fi
+    # Last <win> bytes as decimal values, oldest first; a UTF-8 character is
+    # at most 4 bytes, so the window always covers the trailing character.
+    # shellcheck disable=SC2046
+    set -- $(printf '%s' "${str}" | tail -c "${win}" | od -An -tu1 | tr '\n' ' ')
+    last=""; prev1=""; prev2=""; prev3=""
+    case $# in
+        1) last="$1" ;;
+        2) last="$2"; prev1="$1" ;;
+        3) last="$3"; prev1="$2"; prev2="$1" ;;
+        4) last="$4"; prev1="$3"; prev2="$2"; prev3="$1" ;;
+        *) printf '%s' "${str}"; return 0 ;;
+    esac
+    cont=0
+    lead=""
+    for b in "${last}" "${prev1}" "${prev2}" "${prev3}"; do
+        if [ -z "${b}" ]; then
+            break
+        fi
+        if [ "${b}" -ge 128 ] && [ "${b}" -le 191 ]; then
+            cont=$((cont + 1))
+        else
+            lead="${b}"
+            break
+        fi
+    done
+    have=$((cont + 1))
+    strip=0
+    if [ -z "${lead}" ]; then
+        # 4+ trailing continuation bytes: invalid before truncation, keep.
+        strip=0
+    elif [ "${lead}" -lt 128 ]; then
+        # Stray continuations after ASCII: invalid before truncation.
+        strip="${cont}"
+    elif [ "${lead}" -ge 194 ] && [ "${lead}" -le 223 ]; then
+        if [ "${have}" -lt 2 ]; then strip="${have}"; fi
+    elif [ "${lead}" -ge 224 ] && [ "${lead}" -le 239 ]; then
+        if [ "${have}" -lt 3 ]; then strip="${have}"; fi
+    elif [ "${lead}" -ge 240 ] && [ "${lead}" -le 244 ]; then
+        if [ "${have}" -lt 4 ]; then strip="${have}"; fi
+    else
+        # 0xC0, 0xC1, 0xF5-0xFF are never valid UTF-8 lead bytes.
+        strip="${have}"
+    fi
+    if [ "${strip}" -le 0 ]; then
+        printf '%s' "${str}"
+        return 0
+    fi
+    keep=$((nbytes - strip))
+    if [ "${keep}" -le 0 ]; then
+        return 0
+    fi
+    printf '%s' "${str}" | dd bs=1 count="${keep}" 2>/dev/null
+    return 0
 }
 
 # Largest numeric tick already present across every ledger-*.jsonl in the dir.
@@ -168,8 +267,12 @@ fi
 
 AGENT="$(sanitize_agent "${AGENT}")"
 
-# Truncate summary to 200 chars BEFORE escaping (200 is a source-text budget).
+# Truncate summary to 200 BEFORE escaping (200 is a source-text budget).
+# GNU cut -c counts bytes and can land mid-codepoint on multibyte input;
+# BSD cut -c counts characters and clips cleanly. The trim removes any
+# incomplete trailing UTF-8 sequence so the JSONL line stays valid UTF-8.
 SUMMARY="$(printf '%s' "${SUMMARY}" | cut -c1-200)"
+SUMMARY="$(utf8_trim_incomplete "${SUMMARY}")"
 
 PLAN_DIR="$(resolve_plan_dir)"
 LEDGER_FILE="${PLAN_DIR}/ledger-${AGENT}.jsonl"

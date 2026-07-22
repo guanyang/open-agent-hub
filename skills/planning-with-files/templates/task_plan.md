@@ -13,6 +13,14 @@
 -->
 [One sentence describing the end state]
 
+## Next Step
+<!-- 
+  WHAT: The single next action you are about to take. Keep it to one imperative line.
+  WHY: Sits right after the goal, so every hook injection carries the immediate action.
+  WHEN: Update whenever a phase status changes or the next action changes.
+-->
+[The single next action. Update whenever phase status changes.]
+
 ## Current Phase
 <!-- 
   WHAT: Which phase you're currently working on (e.g., "Phase 1", "Phase 3").
