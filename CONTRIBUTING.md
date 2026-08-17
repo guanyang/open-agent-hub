@@ -1,6 +1,6 @@
-# Contributing to Antigravity Skills
+# Contributing to open-agent-hub
 
-Thank you for your interest in contributing to Antigravity Skills! We welcome contributions from the community to help make agents more capable and professional.
+Thank you for your interest in contributing to open-agent-hub! We welcome contributions from the community to help make agents more capable and professional.
 
 ## 🚀 How to Contribute
 
@@ -19,7 +19,7 @@ We value clear documentation. You can improve existing manuals, README files, or
 - We maintain bilingual support (English/Chinese) for major documentation.
 
 ### 3. Reporting Bugs
-Please use the [GitHub Issues](https://github.com/guanyang/antigravity-skills/issues) to report bugs or technical failures. Provide as much context as possible, including:
+Please use the [GitHub Issues](https://github.com/guanyang/open-agent-hub/issues) to report bugs or technical failures. Provide as much context as possible, including:
 - The skill being used.
 - The AI tool/Agent being used.
 - Steps to reproduce the issue.
