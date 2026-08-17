@@ -33,7 +33,7 @@ Please use the [GitHub Issues](https://github.com/guanyang/open-agent-hub/issues
 
 1.  **Clone your fork**:
     ```bash
-    git clone https://github.com/YOUR_USERNAME/antigravity-skills.git
+    git clone https://github.com/YOUR_USERNAME/open-agent-hub.git
     ```
 2.  **Create a feature branch**:
     ```bash
