@@ -14,7 +14,7 @@ A lightweight, zero-dependency CLI tool to manage and activate capabilities for 
 ├── commands/           # Agent runtime Slash Commands (*.md)
 ├── docs/               # Technical specs and user guidelines
 ├── scripts/            # CLI manager source code (hub.js)
-├── skills/             # Modular capability skills (83+ skills)
+├── skills/             # Modular capability skills (88+ skills)
 ├── spec/               # Technical specification definitions for capabilities
 ├── template/           # Development templates for Skills, Agents, and Commands
 ├── AGENTS.md           # Project-level LLM coding guidelines
@@ -38,7 +38,7 @@ A lightweight, zero-dependency CLI tool to manage and activate capabilities for 
 
 To maintain clean and focused documentation, deep-dive specifications have been moved under the `docs/` directory. Please refer to:
 
-*   🧩 **[Skill Guidelines](docs/Skill_Guidelines.md)**: Design standards, trigger rules, and a complete catalog of the 83+ modular skills.
+*   🧩 **[Skill Guidelines](docs/Skill_Guidelines.md)**: Design standards, trigger rules, and a complete catalog of the 88+ modular skills.
 *   🤖 **[Agent Guidelines](docs/Agent_Guidelines.md)**: Specifications for Orchestrator, Evaluator, and Optimizer agent roles, detailing handoff contracts and Evaluator-Optimizer loops.
 *   🛠 **[Command Guidelines](docs/Command_Guidelines.md)**: Guidelines for agent-facing slash commands (such as `/commit`, `/review`, and `/test-tdd`).
 

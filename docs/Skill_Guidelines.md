@@ -38,7 +38,7 @@ To maintain consistency, a skill prompt should follow this standard Markdown str
 
 ---
 
-## 🚀 Integrated Skills Catalog (Total: 83)
+## 🚀 Integrated Skills Catalog (Total: 88)
 
 ### 🎨 Creative & Design
 These skills focus on visual expression, UI/UX design, and artistic creation.
@@ -138,6 +138,14 @@ These skills focus on architectural design, tool building, and quality assessmen
 *   **`@[advanced-evaluation]`**: Implement advanced evaluation methods like LLM-as-a-Judge and pairwise comparison.
 *   **`@[harness-engineering]`**: Design control systems and boundaries for autonomous agent loops.
 
+### 🔎 Web Search & Research
+These skills route agents to live web search, URL content extraction, and cited research through You.com MCP tools.
+*   **`@[you-web]`**: Current web search, URL reading, and cited web synthesis via You.com MCP (`you-search`, `you-contents`, `you-research`).
+*   **`@[you-research]`**: Route research tasks between agentic search, the Research API, and managed `you-research` MCP fallback.
+*   **`@[you-finance]`**: Route finance questions to Finance Research API scripts or an MCP fallback with market data.
+*   **`@[you-discover]`**: Plan You.com integrations for agent SDKs, IDEs, and MCP clients via the `you-discover` tool and Docs MCP.
+*   **`@[you-free]`**: Keyless basic web search via the free You.com MCP profile (`you-search` only, no API key required).
+
 ### 🧩 System Extension
 These skills allow agents to extend their own capability boundaries.
 *   **`@[mcp-builder]`**: Build MCP (Model Context Protocol) servers to connect external tools and data.
@@ -163,5 +171,6 @@ This project integrates core ideas or skill implementations from the following e
 - **[Remotion Skills](https://github.com/remotion-dev/skills)**: Official Remotion skills for AI agents to create videos programmatically.
 - **[Vercel Agent Skills](https://github.com/vercel-labs/agent-skills)**: Official Vercel skills for React best practices, composition patterns, and web design guidelines.
 - **[Supabase Agent Skills](https://github.com/supabase/agent-skills)**: Official Supabase skills for Postgres performance optimization and best practices.
+- **[You.com Agent Skills](https://github.com/youdotcom-oss/agent-skills)**: Official You.com skills for web search, URL content extraction, cited research, and finance research via You.com MCP tools.
 - **[Baoyu Skills](https://github.com/JimLiu/baoyu-skills)**: A collection of skills for content generation, publishing, and daily efficiency, including XHS image generator, infographic generator, and content converters.
 
