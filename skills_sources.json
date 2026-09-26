@@ -135,5 +135,20 @@
                 "exclude": []
             }
         ]
+    },
+    {
+        "name": "Continuum-AI-Corp/OrcaReplay",
+        "repo_url": "https://github.com/Continuum-AI-Corp/OrcaReplay.git",
+        "branch": "main",
+        "copy_rules": [
+            {
+                "source": "skills",
+                "dest": "skills",
+                "exclude": [],
+                "include": [
+                    "orca-replay"
+                ]
+            }
+        ]
     }
 ]
