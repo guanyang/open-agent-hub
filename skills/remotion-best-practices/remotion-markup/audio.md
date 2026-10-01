@@ -40,7 +40,7 @@ Multiple audio tracks can be layered by adding multiple `<Audio>` components.
 
 ## Trimming
 
-Use `trimBefore` and `trimAfter` to remove portions of the audio. Values are in frames.
+Use `trimBefore` to skip the beginning of the audio and `durationInFrames` to end it early. Values are in frames.
 
 ```tsx
 const { fps } = useVideoConfig();
@@ -49,7 +49,7 @@ return (
   <Audio
     src={staticFile("audio.mp3")}
     trimBefore={2 * fps} // Skip the first 2 seconds
-    trimAfter={10 * fps} // End at the 10 second mark
+    durationInFrames={8 * fps} // Play 8 seconds, until the 10 second mark
   />
 );
 ```
@@ -145,8 +145,10 @@ Reverse playback is not supported.
 Use `loop` to loop the audio indefinitely:
 
 ```tsx
-<Audio src={staticFile("audio.mp3")} loop />
+<Audio src={staticFile("audio.mp3")} loop premountFor={fps} />
 ```
+
+Put `name`, `from`, `loop`, `volume`, and `premountFor` directly on `<Audio>`.
 
 Use `loopVolumeCurveBehavior` to control how the frame count behaves when looping:
 
