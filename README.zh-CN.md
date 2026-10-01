@@ -14,7 +14,7 @@
 ├── commands/           # Agent 运行时的 Slash Commands 目录 (*.md)
 ├── docs/               # 技术规范与使用指南 (Agent, Command, Skill 指南)
 ├── scripts/            # CLI 核心管理脚本 (hub.js)
-├── skills/             # 模块化能力技能库目录 (83+ 技能)
+├── skills/             # 模块化能力技能库目录 (88+ 技能)
 ├── spec/               # Agent 能力标准与技术规范定义目录
 ├── template/           # 新增能力组件（Skill/Agent/Command）开发模板
 ├── AGENTS.md           # LLM 编码行为规范指导 (项目级)
