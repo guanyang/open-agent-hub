@@ -25,6 +25,7 @@ Do not activate this skill for adjacent work owned by other skills:
 - Conversation summarization, compaction, or durable handoff wording: `context-compression`.
 - Token-efficiency tactics that do not require file-backed storage: `context-optimization`.
 - Multi-agent topology or handoff protocol design: `multi-agent-patterns`.
+- Model edits that evict content from the live window itself: `self-managed-context`.
 
 ## Core Concepts
 
@@ -270,6 +271,7 @@ This skill owns file-backed context storage and retrieval. Adjacent skills own s
 - `multi-agent-patterns`: sub-agent file workspaces enable context isolation and direct handoff.
 - `context-compression`: file references can anchor summaries and preserve details omitted from compressed context.
 - `tool-design`: tools should return file references for large outputs and expose safe read/search operations.
+- `self-managed-context`: offloading leaves the original in the live window; evicting it requires the model to edit its own context.
 
 ## References
 

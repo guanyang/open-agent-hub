@@ -28,6 +28,7 @@ Do not activate this skill for adjacent work owned by other skills:
 - One-shot token efficiency, masking, or caching without an improvement loop: `context-optimization`.
 - Remote sandboxes and background execution infrastructure for running the loop: `hosted-agents`.
 - Whether to build the loop at all, pipeline shape, and cost estimation: `project-development`.
+- The self-editing context behavior and efficiency reward a loop optimizes: `self-managed-context`.
 
 ## Core Concepts
 
@@ -220,6 +221,7 @@ This skill connects to:
 - multi-agent-patterns - Parallel candidate evaluation and proposer-verifier separation are multi-agent topologies
 - hosted-agents - Owns the sandboxed execution infrastructure that enforces the runtime boundary
 - context-optimization - Owns one-shot context efficiency; this skill owns the loop that evolves context mechanisms over time
+- self-managed-context - Owns the self-editing behavior and its cost signal when the evolved artifact is a model's context-management skill or policy
 
 ## References
 
