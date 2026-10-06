@@ -1,7 +1,7 @@
 ---
 name: remotion-markup
 description: Content, animation and effects best practices
-version: 4.0.532
+version: 4.0.533
 ---
 
 This is guidance for writing Remotion React Markup.
@@ -14,6 +14,12 @@ Users may make edits in the code outside of the conversation.
 If you detect a surprising change made in the meanwhile, don't overwrite it, assume it was intentional or ask for confirmation.
 
 ## General rules
+
+Inside a composition or scene component, get `fps` from `useVideoConfig()` for
+all seconds-to-frames calculations, including timing props such as `from`,
+`trimBefore`, `durationInFrames`, and `premountFor`. Keeping the expression on
+the JSX node, such as `trimBefore={4 * fps}`, lets Studio edit the timing and
+keeps it correct if the composition frame rate changes.
 
 Drive animations using `useCurrentFrame()` and `interpolate()`.  
 CSS `transition` or `animation` will not render correctly, they need to refactored.  
@@ -304,6 +310,9 @@ When a scene or group of layers deserves its own editable timeline, follow [conn
 ### Pre-compose action
 
 For a Studio request such as `Pre-compose Ambient glow (src/BarChart.tsx:134)`, find the selected sequence markup at the given location. Make a connected composition, following [connected-compositions.md](connected-compositions.md): extract the markup into a named component, preferably make it interactive with `Interactive.withSchema({wrapInSequence: true})`, and register the same exported component reference with a unique `<Composition>` in the root. Render the interactive component directly with its timing props, or as the only child of a sequence when that wrapper has a purpose. If the selected node is already a sequence, keep its props and extract its children. The registration needs dimensions, fps, duration, and `defaultProps` equivalent to its parent use. A component extraction without a registered composition does not complete a pre-compose request.
+
+Carry inherited styles such as `fontFamily` and font loading into the extracted
+component; see [parent independence](connected-compositions.md#make-the-component-independent-of-its-parent).
 
 ## Voiceover
 

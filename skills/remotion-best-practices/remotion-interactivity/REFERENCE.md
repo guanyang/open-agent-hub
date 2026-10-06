@@ -1,7 +1,7 @@
 ---
 name: remotion-interactivity
 description: Structure Remotion markup for interactivity
-version: 4.0.532
+version: 4.0.533
 ---
 
 By writing Remotion markup in a specific way, the Remotion Studio is able to recognize the structure of the code and makes it interactive:
@@ -140,6 +140,10 @@ Register substantial scenes and reusable components with their own layers or
 animation as standalone compositions. Studio calls these **connected
 compositions**: they can be opened in their own timeline while sharing the same
 component implementation with the parent video.
+
+Define required styles and load fonts inside the component so it works without
+its parent. See
+[parent independence](../remotion-markup/connected-compositions.md#make-the-component-independent-of-its-parent).
 
 Register the same exported component reference that the parent renders. For the
 example above, use `component={LowerThird}`, not `LowerThirdInner` or an inline wrapper.
