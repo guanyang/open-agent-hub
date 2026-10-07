@@ -28,7 +28,7 @@ hooks:
         - type: command
           command: "[ -n \"${CLAUDE_PLUGIN_ROOT:-}\" ] && exit 0; SH=\"${CLAUDE_SKILL_DIR}/scripts/skill-hook.sh\"; [ -f \"$SH\" ] || SH=$(ls \"$HOME/.claude/skills/planning-with-files/scripts/skill-hook.sh\" \"$HOME/.claude/plugins/marketplaces/planning-with-files/scripts/skill-hook.sh\" 2>/dev/null | head -1); [ -n \"$SH\" ] && [ -f \"$SH\" ] && sh \"$SH\" --event=precompact; exit 0"
 metadata:
-  version: "3.22.0"
+  version: "3.23.0"
 ---
 
 # Planning with Files
@@ -325,9 +325,11 @@ For a "babysit until done" workflow, combine `/plan-loop` (cadence) with `/plan-
 
 For skill-only installs (no `commands/` folder) or sessions where the slash command refuses to fire, the model can produce the same effect by executing the wrapper steps inline.
 
+For parallel tasks, pin each host with its task's `PLAN_ID` before starting it, or use separate worktrees. Set `PWF_PLAN_ROOT` when the project root differs from the host's working directory. `.planning/.active_plan` is a shared default; switching it does not bind parallel sessions to their tasks.
+
 **Manual `/plan-goal` procedure:**
 
-1. Resolve the active plan: prefer `${PLAN_ID}` env var, then `.planning/.active_plan`, then newest `.planning/<dir>/`, then legacy `./task_plan.md`.
+1. If set, validate `PWF_PLAN_ROOT` as an absolute, existing project root. When `PLAN_ID` is set, use the installed `scripts/resolve-plan-dir.sh` (or `.ps1`) and stop if it returns no directory; the explicit pin was rejected. With `PLAN_ID` unset, first run the resolver with `--check-ambiguity` (`-CheckAmbiguity` in PowerShell); if it returns `PWF_PLAN_AMBIGUOUS_V1`, stop and set a task-specific `PLAN_ID`. Then run the resolver normally and read the selected directory. If it returns no directory and the project root has `task_plan.md`, use the legacy root files; otherwise stop recovery.
 2. Read the resolved `task_plan.md`.
 3. Compose a goal condition. Default: `"all phases in task_plan.md report Status: complete and check-complete.sh reports ALL PHASES COMPLETE"`. If the user passed additional clauses, append them.
 4. Issue Claude Code's native `/goal <condition>` (CC primitive, always available).
