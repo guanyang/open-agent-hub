@@ -1,6 +1,6 @@
 # Pseudo-Formal Task Brief Template
 
-A reusable template for launching long-running autonomous agents or parallel orchestrations on hard problems, plus the pre-launch evaluation rubric. Copy the template, delete blocks that do not apply, and fill the rest. Blocks marked (parallel runs) are only needed when an orchestrator manages concurrent workers.
+A reusable template for launching long-running autonomous agents or parallel orchestrations on hard problems, plus the pre-launch evaluation rubric. Copy the template, delete blocks that do not apply, and fill the rest. Blocks marked (parallel runs) are only needed when an orchestrator manages concurrent workers; blocks marked (orchestrated runs) apply whenever an orchestrator delegates stages to workers, in parallel or in sequence.
 
 ## Template
 
@@ -69,6 +69,19 @@ these heuristics:
 - The root agent repeatedly synthesizes, challenges, redirects, and
   launches new rounds. Do not stop after the first wave fails.
 
+CONTRACTS (orchestrated runs)
+
+Every delegated worker returns a contract, and downstream work starts
+only when that contract is satisfied. Each contract states:
+- the artifacts and information the worker must return
+- named, typed checks for the failures this stage can introduce:
+  <e.g. no_future_leakage: bool, tests_unmodified: bool>
+- the command that verifies the work, with its output in the report
+Keep each role to one line; put task-specific detail in contracts and
+in the call order. A worker sees only its prompt and the workspace, so
+every spawn names the earlier-stage artifacts it must use. Simulating
+a worker inside the orchestrator's own turn does not count.
+
 VERIFICATION
 
 Use adversarial reviewer agents with fresh context throughout. Every
@@ -79,10 +92,22 @@ leakage paths, and too-good-to-be-true signatures of this field.
 Always include the domain's version of circularity: satisfying the
 goal by assuming something equivalent to it.>
 
+Reject degenerate values that appear only when something upstream is
+broken: <too-good-to-be-true metrics, quantities that should differ
+but match, placeholders, NaN or empty results treated as passing>.
+
 Require workers to return concrete artifacts: <lemmas, constructions,
 scripts, datasets, measurements, counterexamples appropriate to the
 domain>. Reject status reports, vague optimism, and claims that an
-unresolved step is "routine".
+unresolved step is "routine". Every claim in a report points to
+evidence produced after the last change to the artifact it describes.
+
+A finding blocks return only if it shows, with evidence (a failing
+check, a counterexample, a reproduction), that a candidate violates
+the TASK predicate, a contract check, or the checklist above. Log
+every other finding as non-blocking. Send each blocking finding back
+to the responsible worker as a recall: the failed checks, a narrowed
+scope, acceptance criteria, and a retry cap of <N>.
 
 Structure the final artifact modularly so each part can be verified
 in isolation, with its premises and conclusion stated locally.
@@ -90,7 +115,8 @@ in isolation, with its premises and conclusion stated locally.
 RETURN CONDITION
 
 Return only when a candidate satisfies the TASK predicate and
-survives the adversarial audit above. Do not return a reduction,
+survives the adversarial audit above: every contract check passes and
+no blocking finding is open. Do not return a reduction,
 partial result, isolated missing step, best-effort summary, or
 explanation of why the problem is difficult.
 
@@ -121,6 +147,10 @@ do not answer that it is open.
 - **Effort floors are permissions, not schedules.** The floor removes permission to quit early. Enforce real time and cost limits in the harness; a prompt cannot bound spend.
 - **Keep hard constraints out of the brief.** Budgets, tool permissions, and sandbox boundaries stated in prompts are advisory under optimization pressure. State them in the runtime and mention them in the brief only for the agent's planning.
 - **Per-spawn specs for workers.** The orchestrator should give every spawned worker four things: objective, output format, tool and source guidance, and task boundaries. Put this rule in the ORCHESTRATION block for orchestrations that write their own worker prompts.
+- **Contracts carry the task.** When a model optimized its own multi-agent workflow text, task information moved out of roles and instructions and into output contracts and call order (`mass-handoff-contracts.md`). Write the role in one line and spend the words on what the worker must return and check.
+- **Name checks after failures.** `no_future_leakage: bool` beats "rigorous data preparation". Run each check once on a known-bad input before launch; a check that treats NaN as passing is worse than no check, because it certifies the failure.
+- **The blocking rule is what ends the review.** A fresh adversarial reviewer always finds something. Without a blocking rule, "survives the audit" either never converges or the orchestrator decides privately which findings matter, which is confidence-based return under another name.
+- **Recall, do not reopen.** A recall with failed checks, a narrowed scope, acceptance criteria, and a retry cap turns a finding into bounded work for one worker instead of another open-ended pass over the whole artifact.
 
 ## Pre-launch evaluation rubric
 
@@ -139,4 +169,16 @@ Score each dimension 0 (absent), 1 (present but gameable), or 2 (adversary-proof
 | 9 | Contamination guards | Retrieval scope stated wherever result independence matters |
 | 10 | Harness separation | No hard constraint lives only in the prompt; budgets and permissions enforced outside |
 
-Final red-team pass: give the brief to a fresh model instance with the single question "How could an agent satisfy the letter of this brief without solving the problem?" Patch every credible answer. Repeat until the answers stop being credible.
+## Additional checks for orchestrated runs
+
+Answer each before launching a run that delegates to workers or gates return on review:
+
+- Does every delegated worker have a contract with named checks, and does downstream work wait for it?
+- Is every mechanically checkable part of the TASK predicate expressed as a runnable check?
+- Does the brief say which audit findings block return, and route each one back as a recall with acceptance criteria and a retry cap?
+- Does the agent that acts on audit findings get as much capability and prompt design as the auditor?
+- Will the brief be judged across several runs, with at least one check that sits outside the model loop?
+
+## Red-team pass
+
+Give the brief to a fresh model instance with the question "What is the cheapest way to make this look done without solving the problem?" Patch every answer that names a concrete near miss the brief would currently accept, either by adding it to DOES NOT COUNT or by adding a check that catches it. Stop when a pass returns only near misses that are already excluded or already caught; "find more problems" has no natural end, so the stopping rule has to be explicit.
