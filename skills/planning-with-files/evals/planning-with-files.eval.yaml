@@ -1,0 +1,52 @@
+# skill-lens eval cases for planning-with-files.
+#
+# One case to start with. Run with and without the skill, five times each:
+#   skill-lens run skills/planning-with-files --baseline none --repeat 5
+#
+# Every check here works under both a product runner (claude-code) and a
+# framework runner (pydantic-ai), so the cases use file assertions and a
+# judge, not tool names: the two runners spell their tools differently.
+
+cases:
+  # Mirrors Test 1, eval 1 (todo-cli) in docs/evals.md, with the same seven
+  # assertions, so the numbers can be compared with that table. The skill
+  # keeps the files either in a named plan directory, .planning/<date>-<slug>/
+  # (whose name changes on every run), or in the project root (its legacy
+  # layout). Each filename must have exactly one match across both places.
+  # Checks are independent: files split across directories can still pass.
+  - name: creates-the-three-files
+    task: Build a Python CLI todo tool with persistence.
+    workspace: {}
+    assertions:
+      - kind: file-produced
+        file_glob: [task_plan.md, .planning/*/task_plan.md]
+      - kind: file-produced
+        file_glob: [findings.md, .planning/*/findings.md]
+      - kind: file-produced
+        file_glob: [progress.md, .planning/*/progress.md]
+      - kind: regex
+        value: "(?m)^## Goal"
+        file_glob: [task_plan.md, .planning/*/task_plan.md]
+      - kind: regex
+        value: "(?m)^### Phase"
+        file_glob: [task_plan.md, .planning/*/task_plan.md]
+      - kind: contains
+        value: "**Status:**"
+        file_glob: [task_plan.md, .planning/*/task_plan.md]
+      - kind: regex
+        value: "(?m)^## Errors Encountered"
+        file_glob: [task_plan.md, .planning/*/task_plan.md]
+      # The contents, not only the files. findings.md must record something:
+      # a bullet with text, or a table row under a header. The empty file
+      # init-session.sh writes has only bare "-" bullets and header rows, and
+      # runs that passed every check above still left it that way. SKILL.md
+      # names no headings for findings.md ("Research, discoveries"), so any
+      # section counts.
+      - kind: regex
+        value: "(?m)^[ \\t]*[-*][ \\t]+\\S|^\\|[ :|-]+\\|[ \\t]*\\n\\|[ \\t]*[^|\\s]"
+        file_glob: [findings.md, .planning/*/findings.md]
+    judge:
+      artifacts:
+        - glob: [progress.md, .planning/*/progress.md]
+      rubric:
+        - progress.md records at least one concrete action taken on the todo tool in this session, not only empty template fields such as "**Phase:**" or "**Started:**".
