@@ -1,6 +1,6 @@
 # skill-lens eval cases for planning-with-files.
 #
-# One case to start with. Run with and without the skill, five times each:
+# Two cases. Run with and without the skill, five times each:
 #   skill-lens run skills/planning-with-files --baseline none --repeat 5
 #
 # Every check here works under both a product runner (claude-code) and a
@@ -50,3 +50,45 @@ cases:
         - glob: [progress.md, .planning/*/progress.md]
       rubric:
         - progress.md records at least one concrete action taken on the todo tool in this session, not only empty template fields such as "**Phase:**" or "**Started:**".
+
+  # The skill's main claim: a fresh session resumes from the files an earlier
+  # session wrote. Session 1 plans three phases and is told to stop after
+  # phase 1. Session 2 has no conversation history, only the workspace, and
+  # is told to do the next phase without being told which one it is. Every
+  # check runs after session 2 and looks for the work session 2 was asked to
+  # do: phase 2 marked complete and phase 3 not. The checks cannot tell which
+  # session did that work, so a session 1 that ignored "then stop" would pass
+  # too (docs/skill-lens.md, Known limits). A file_glob must match
+  # exactly one file, so a session 2 that starts a second plan instead of
+  # continuing the first one fails too.
+  - name: resumes-from-its-own-plan
+    sessions:
+      - >-
+        Build a Python CLI todo tool with persistence, in three phases.
+        Phase 1: design the storage format and the commands.
+        Phase 2: implement add and list.
+        Phase 3: implement done and delete.
+        Do phase 1 only, then stop.
+      - >-
+        Continue the todo tool from where the last session stopped.
+        Do the next phase only, then stop.
+    workspace: {}
+    assertions:
+      # The first Status line of the "### Phase 2" section says complete.
+      # Do not skip it for a later child section's status. The section ends
+      # at the next heading of level 1 to 3 ("#", "##" or "###").
+      - kind: regex
+        value: '(?ms)^### Phase 2\b(?:(?!^#{1,3} |\*\*Status:\*\*).)*?\*\*Status:\*\*[ \t]*complete\b'
+        file_glob: [task_plan.md, .planning/*/task_plan.md]
+      # Phase 3 was left for later: its first Status line says anything but complete
+      # (pending, in_progress, not_started, ...), in any letter case and after
+      # any leading punctuation or emoji.
+      - kind: regex
+        value: '(?ims)^### Phase 3\b(?:(?!^#{1,3} |\*\*Status:\*\*).)*?\*\*Status:\*\*[ \t]*(?!\W*complete\b)\S'
+        file_glob: [task_plan.md, .planning/*/task_plan.md]
+    judge:
+      artifacts:
+        - glob: [progress.md, .planning/*/progress.md]
+      rubric:
+        - progress.md records concrete work on the add and list commands, such as files changed or commands run, not only empty template fields.
+        - progress.md has an entry for phase 1, the design of the storage format and the commands, before its entries for the add and list work.

@@ -1,5 +1,6 @@
 # Check if all phases in task_plan.md are complete
 # Default invocation: advisory echo, always exits 0 (Stop hook status report).
+# With -Validate: read-only creation check; exits 1 for an untrackable plan.
 # With -Gate: deliberate completion gate, opt-in per plan via <plan-dir>/.mode.
 # Used by Stop hook to report task completion status.
 #
@@ -18,12 +19,13 @@
 
 param(
     [string]$PlanFile = "",
-    [switch]$Gate
+    [switch]$Gate,
+    [switch]$Validate
 )
 
 # issue #195: per-invocation opt-out (PLANNING_DISABLED=1) for one-shot/CI
 # sessions that share a cwd with a plan but never opted into it.
-if ($env:PLANNING_DISABLED -eq '1') { exit 0 }
+if ($env:PLANNING_DISABLED -eq '1' -and -not $Validate) { exit 0 }
 
 if ($PlanFile -ne "") {
     $PlanDir = Split-Path -Parent $PlanFile
@@ -36,7 +38,10 @@ if ($PlanFile -ne "") {
         try {
             $resolvedDir = (& $resolver 2>$null | Select-Object -First 1)
             if ($null -eq $resolvedDir) { $resolvedDir = "" }
-            if (-not $resolvedDir -and ((& $resolver -CheckAmbiguity) -eq "PWF_PLAN_AMBIGUOUS_V1")) { exit 0 }
+            if (-not $resolvedDir -and ((& $resolver -CheckAmbiguity) -eq "PWF_PLAN_AMBIGUOUS_V1")) {
+                if ($Validate) { Write-Output '[planning-with-files] Plan format invalid: select one plan before validation.'; exit 1 }
+                exit 0
+            }
         } catch {
             $resolvedDir = ""
         }
@@ -45,12 +50,17 @@ if ($PlanFile -ne "") {
         $PlanFile = Join-Path $resolvedDir "task_plan.md"
         $PlanDir = $resolvedDir
     } else {
+        if ($Validate -and ($env:PLAN_ID -or $env:PWF_PLAN_ROOT)) {
+            Write-Output '[planning-with-files] Plan format invalid: an explicit plan selector did not resolve.'
+            exit 1
+        }
         $PlanFile = "task_plan.md"
         $PlanDir = "."
     }
 }
 
 if (-not (Test-Path $PlanFile)) {
+    if ($Validate) { Write-Output '[planning-with-files] Plan format invalid: task_plan.md was not found.'; exit 1 }
     # Automatic gate checks have nothing to report without a plan; the explicit report keeps its notice.
     if ($Gate) { exit 0 }
     Write-Host '[planning-with-files] No task_plan.md found -- no active planning session.'
@@ -59,6 +69,36 @@ if (-not (Test-Path $PlanFile)) {
 
 # Read file content
 $content = Get-Content $PlanFile -Raw
+
+# Explicit creation validation never mutates a plan or changes Stop behavior.
+if ($Validate) {
+    $phases = 0
+    $statuses = 0
+    $inPhase = $false
+    $invalid = $false
+    foreach ($line in ($content -split '\r?\n')) {
+        if ($line -cmatch '^### Phase(?:[ \t]|$)') {
+            if ($inPhase -and $statuses -ne 1) { $invalid = $true }
+            $phases++
+            $inPhase = $true
+            $statuses = 0
+        } elseif ($line -match '^#{1,3}[ \t]') {
+            if ($inPhase -and $statuses -ne 1) { $invalid = $true }
+            $inPhase = $false
+        }
+        if ($inPhase) {
+            $statuses += ([regex]::Matches($line, '\*\*Status:\*\*[ \t]+(?:pending|in_progress|complete)(?:[^\p{L}\p{N}_]|$)')).Count
+            $statuses += ([regex]::Matches($line, '\[(?:pending|in_progress|complete)\]')).Count
+        }
+    }
+    if ($inPhase -and $statuses -ne 1) { $invalid = $true }
+    if ($phases -eq 0 -or $invalid) {
+        Write-Output '[planning-with-files] Plan format invalid: use ### Phase headings with exactly one native status per phase.'
+        exit 1
+    }
+    Write-Output ('[planning-with-files] Plan format valid (' + $phases + ' phases).')
+    exit 0
+}
 
 # Count total phases
 $TOTAL = ([regex]::Matches($content, "### Phase")).Count

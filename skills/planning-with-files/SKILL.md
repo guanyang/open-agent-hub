@@ -28,7 +28,7 @@ hooks:
         - type: command
           command: "[ -n \"${CLAUDE_PLUGIN_ROOT:-}\" ] && exit 0; SH=\"${CLAUDE_SKILL_DIR}/scripts/skill-hook.sh\"; [ -f \"$SH\" ] || SH=$(ls \"$HOME/.claude/skills/planning-with-files/scripts/skill-hook.sh\" \"$HOME/.claude/plugins/marketplaces/planning-with-files/scripts/skill-hook.sh\" 2>/dev/null | head -1); [ -n \"$SH\" ] && [ -f \"$SH\" ] && sh \"$SH\" --event=precompact; exit 0"
 metadata:
-  version: "3.25.1"
+  version: "3.25.2"
 ---
 
 # Planning with Files
@@ -79,12 +79,28 @@ Metadata mode may report that same-project session activity exists, but it emits
 
 Before a complex task:
 
-1. **Resolve or initialize the task directory.** Reuse the selected plan when resuming. For a separate task, run `scripts/init-session.sh "Task Name"` and use the printed `PLAN_ID` to pin its host.
-2. **Create missing planning files only.** Use [templates/task_plan.md](templates/task_plan.md), [templates/findings.md](templates/findings.md), and [templates/progress.md](templates/progress.md) in that directory. Preserve existing work.
+1. **Restore before creating.** Reuse the selected plan when resuming. For a new task, run the installed initializer before implementation; follow the creation contract below and pin the host with its printed `PLAN_ID` when using a named plan.
+2. **Preserve the initialized structure.** Fill in the selected plan and notes without replacing the native phase/status markers. Existing planning files must not be overwritten.
 3. **Re-read the selected plan before decisions.** Update progress after each phase.
 4. **Assign one plan owner.** The orchestrator owns `task_plan.md` and shared summaries. Workers report through their own ledgers or assigned files; they do not independently rewrite the shared planning files.
 
 > Planning files belong to the selected task directory in the project. The installation directory contains the scripts and templates.
+
+## New plan creation contract
+
+For a new task, use the installed initializer before implementation. Set `PWF_SKILL_DIR` to the directory containing the SKILL.md you just read, then run from the project root:
+
+```sh
+sh "$PWF_SKILL_DIR/scripts/init-session.sh"
+# After filling in the selected plan, validate its explicit path:
+sh "$PWF_SKILL_DIR/scripts/check-complete.sh" --validate path/to/task_plan.md
+```
+
+PowerShell equivalents are `init-session.ps1` and `check-complete.ps1 -Validate -PlanFile path/to/task_plan.md`. A named task may use the initializer's name argument and printed `PLAN_ID`.
+
+Keep each phase as `### Phase N: Name` with exactly one `**Status:** pending`, `**Status:** in_progress`, or `**Status:** complete` line. A `## Phases` checklist or numbered summary alone is not trackable. Preserve these markers when tailoring the generated plan; do not replace the skeleton with a compact custom format. Validation must succeed before substantive work and after changing phase structure. This checks format, not task completion or attestation.
+
+Reuse existing plans without overwriting them. If an existing plan fails validation, report the issue for its owner to review; do not automatically rewrite it. If helpers cannot run, copy the shipped template exactly and state that native validation is unavailable.
 
 ## The Core Pattern
 

@@ -63,6 +63,22 @@ else
     warn "resolve-plan-dir.sh not found next to plan-doctor — unexpected install layout"
 fi
 
+# Explicit format validation surfaces plans that inject as prose but cannot be
+# tracked by the native phase/completion helpers. It never rewrites the plan.
+FORMAT_PLAN=""
+if [ -n "${RES}" ] && [ -f "${RES}/task_plan.md" ]; then
+    FORMAT_PLAN="${RES}/task_plan.md"
+elif [ -z "${PLAN_ID:-}${PWF_PLAN_ROOT:-}" ] && [ -f task_plan.md ]; then
+    FORMAT_PLAN="task_plan.md"
+fi
+if [ -n "${FORMAT_PLAN}" ] && [ -f "${SCRIPT_DIR}/check-complete.sh" ]; then
+    if FORMAT_OUT="$(sh "${SCRIPT_DIR}/check-complete.sh" --validate "${FORMAT_PLAN}" 2>&1)"; then
+        ok "plan format: ${FORMAT_OUT}"
+    else
+        fail "plan format: ${FORMAT_OUT} Existing plan left unchanged; its owner must review the format."
+    fi
+fi
+
 # --- [3] hook injection ------------------------------------------------------
 INJ="${SCRIPT_DIR}/inject-plan.sh"
 if [ -f "${INJ}" ]; then

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Check if all phases in task_plan.md are complete
 # Default invocation: advisory echo, always exits 0 (Stop hook status report).
+# With --validate: read-only creation check; exits 1 for an untrackable plan.
 # With --gate: deliberate completion gate, opt-in per plan via <plan-dir>/.mode.
 # Used by Stop hook to report task completion status.
 #
@@ -31,15 +32,13 @@
 # interactive terminal (TTY) is skipped entirely. No data on stdin is treated
 # as stop_hook_active=false.
 
-# issue #195: per-invocation opt-out (PLANNING_DISABLED=1) for one-shot/CI
-# sessions that share a cwd with a plan but never opted into it.
-[ "${PLANNING_DISABLED:-}" = "1" ] && exit 0
-
 GATE=0
+VALIDATE=0
 PLAN_FILE=""
 for _arg in "$@"; do
     case "$_arg" in
         --gate) GATE=1 ;;
+        --validate) VALIDATE=1 ;;
         *)
             if [ -z "$PLAN_FILE" ]; then
                 PLAN_FILE="$_arg"
@@ -47,6 +46,9 @@ for _arg in "$@"; do
             ;;
     esac
 done
+
+# Hook opt-out does not turn an explicitly requested format check into success.
+[ "${PLANNING_DISABLED:-}" = "1" ] && [ "$VALIDATE" -eq 0 ] && exit 0
 
 PLAN_DIR=""
 if [ -n "${PLAN_FILE}" ]; then
@@ -58,6 +60,7 @@ else
     if [ -f "${RESOLVER}" ]; then
         RESOLVED_DIR="$(sh "${RESOLVER}" 2>/dev/null)"
         if [ -z "$RESOLVED_DIR" ] && [ "$(sh "${RESOLVER}" --check-ambiguity 2>/dev/null)" = "PWF_PLAN_AMBIGUOUS_V1" ]; then
+            [ "$VALIDATE" -eq 1 ] && { echo "[planning-with-files] Plan format invalid: select one plan before validation." >&2; exit 1; }
             exit 0
         fi
     fi
@@ -71,7 +74,7 @@ else
         # same wrong-plan harm the binding removes, and here it would decide
         # whether an autonomous run is allowed to stop.
         echo "[planning-with-files] An explicit PLAN_ID or PWF_PLAN_ROOT did not resolve to a plan; no completion state was read and no other plan was substituted."
-        exit 0
+        exit "$VALIDATE"
     else
         PLAN_FILE="task_plan.md"
         PLAN_DIR="."
@@ -79,11 +82,48 @@ else
 fi
 
 if [ ! -f "$PLAN_FILE" ]; then
+    [ "$VALIDATE" -eq 1 ] && { echo "[planning-with-files] Plan format invalid: task_plan.md was not found." >&2; exit 1; }
     # Automatic gate checks have nothing to report without a plan (header:
     # "plans stay silent in --gate mode"); the explicit report keeps its notice.
     [ "$GATE" -eq 1 ] && exit 0
     echo "[planning-with-files] No task_plan.md found — no active planning session."
     exit 0
+fi
+
+# Creation validation is deliberately separate from advisory/gated completion.
+# Keep one native status per phase, including the existing inline form. This
+# never repairs or writes the plan, changes attestation, or weakens Stop guards.
+if [ "$VALIDATE" -eq 1 ]; then
+    awk '
+        function finish_phase() {
+            if (in_phase && statuses != 1) invalid = 1
+        }
+        /^### Phase([ \t]|$)/ {
+            finish_phase()
+            phases++
+            in_phase = 1
+            statuses = 0
+        }
+        !/^### Phase([ \t]|$)/ && /^#[ \t]|^##[ \t]|^###[ \t]/ {
+            finish_phase()
+            in_phase = 0
+        }
+        in_phase {
+            line = $0
+            statuses += gsub(/\*\*Status:\*\*[ \t]+(pending|in_progress|complete)([^[:alnum:]_]|$)/, "&", line)
+            line = $0
+            statuses += gsub(/\[(pending|in_progress|complete)\]/, "&", line)
+        }
+        END {
+            finish_phase()
+            if (!phases || invalid) {
+                print "[planning-with-files] Plan format invalid: use ### Phase headings with exactly one native status per phase."
+                exit 1
+            }
+            printf "[planning-with-files] Plan format valid (%d phases).\n", phases
+        }
+    ' "$PLAN_FILE"
+    exit "$?"
 fi
 
 # Count total phases
