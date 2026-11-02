@@ -9,7 +9,7 @@ metadata:
 
 # Infographic Generator
 
-Two dimensions: **layout** (information structure) × **style** (visual aesthetics). Freely combine any layout with any style.
+Two dimensions: **layout** (information structure) × **style** (visual aesthetics); any layout combines with any style.
 
 ## User Input Tools
 
@@ -23,39 +23,32 @@ Concrete `AskUserQuestion` references below are examples — substitute the loca
 
 ## Image Generation Tools
 
-When this skill needs to render an image, resolve the backend in this order:
+Resolve the image backend in this order:
 
-1. **Current-request override** — if the user names a specific backend in the current message, use it.
-2. **Saved preference** — if `EXTEND.md` sets `preferred_image_backend` to a backend available right now, use it.
-3. **Auto-select** (when the preference is `auto`, unset, or the pinned backend isn't available):
-   - **Codex (`imagegen`)** — first, inspect your available-skills / tool inventory. If a skill named `imagegen` is listed, you are running inside Codex and MUST use it: invoke via the `Skill` tool with `skill: "imagegen"`, passing the saved prompt file's content (plus output path and aspect ratio per Codex `imagegen`'s own args). Codex `imagegen` is the official raster backend in that runtime and outranks any non-native skill (e.g., `baoyu-image-gen`) unless the user has explicitly pinned a different `preferred_image_backend`.
-   - **Codex via `codex exec` (`codex-imagegen`)** — if the current runtime exposes no native `imagegen` skill but the `codex` CLI is on `PATH` with an active `codex login`, route through `baoyu-image-gen --provider codex-cli` (preferred), or — if baoyu-image-gen is unavailable — invoke the bundled wrapper directly. Details, parameters, and the runtime-discovery procedure live in [references/codex-imagegen.md](references/codex-imagegen.md) — load that file only when this branch is selected.
-   - **Cursor (`GenerateImage`)** — if the runtime exposes a native `GenerateImage` tool, you are running inside Cursor and it outranks any non-native skill the same way Codex `imagegen` does. Two hard caveats: (a) it has no aspect-ratio parameter — state the target aspect ratio / dimensions explicitly in the prompt text passed as `description`; (b) it does not accept an output directory — it saves to a tool-managed location, so after generation copy/move the file to the skill's expected output path (e.g., `outputs/.../NN-xxx.png`). Reference images go in `reference_image_paths`.
-   - **Other runtime-native tools** — if the runtime exposes a different native image tool (e.g., Hermes `image_generate`), use it the same way.
-   - Otherwise, if exactly one non-native backend is installed (e.g., `baoyu-image-gen`), use it.
-   - Otherwise (multiple non-native backends with no runtime-native tool), ask the user once — batch with any other initial questions.
-4. **If none are available**, tell the user and ask how to proceed.
+1. **User names a backend** in the current message → use it.
+2. **`preferred_image_backend`** in `EXTEND.md` names a backend available now → use it. `ask` means ask every run.
+3. **Auto-select** (preference `auto`, unset, or the pinned backend is unavailable), first match wins:
+   - **Codex `imagegen`** skill is in your available skills → you are in Codex and MUST use it: `Skill` with `skill: "imagegen"`, passing the prompt file's content plus output path and aspect ratio. It outranks non-native skills such as `baoyu-image-gen`.
+   - **Codex via `codex exec` (`codex-imagegen`)**: no native `imagegen`, but the `codex` CLI is on `PATH` with an active `codex login` → `baoyu-image-gen --provider codex-cli` (preferred), or the bundled wrapper if baoyu-image-gen is unavailable. Load [references/codex-imagegen.md](references/codex-imagegen.md) only for this branch.
+   - **Cursor `GenerateImage`** → use it (outranks non-native skills). It has no aspect-ratio parameter, so state the aspect ratio / dimensions in the `description` prompt; it saves to a tool-managed location, so copy the file to the expected output path (e.g., `outputs/.../NN-xxx.png`). Reference images go in `reference_image_paths`.
+   - **Other runtime-native image tool** (e.g., Hermes `image_generate`) → use it the same way.
+   - Exactly one non-native backend installed (e.g., `baoyu-image-gen`) → use it.
+   - Several non-native backends → ask the user once, batched with other initial questions.
+4. **None available** → tell the user and ask how to proceed.
 
-**⛔ Never substitute SVG, HTML, canvas, or other code-based rendering for raster image generation.** Codex `imagegen`'s own description says it should be used "when the output should be a bitmap asset rather than repo-native code or vector." If you cannot resolve a raster backend via step 3, fall through to step 4 and ask the user — do **not** silently emit SVG, write inline `<svg>` markup, or produce HTML/CSS art as a substitute. This applies even if the article/section seems "diagram-like": the consumer skill calling this rule has already decided that a raster image is what it needs.
+**⛔ Raster only**: never substitute SVG, HTML/CSS, canvas, or other code-based rendering for a raster image, even for diagram-like content. If no raster backend resolves, go to step 4.
 
-**⛔ Never repair rendered text by painting over a generated bitmap.** Do not use ImageMagick, Pillow, Canvas, SVG, HTML/CSS, OCR scripts, or any other programmatic overlay to cover, rewrite, erase, stroke, or replace labels, headings, callouts, data values, or any other text inside an already generated infographic. If text is wrong or unclear, regenerate from a corrected prompt, switch to a layout with less on-image text, or ask the user which imperfect candidate to keep.
+**⛔ No bitmap text patching**: never use ImageMagick, Pillow, Canvas, SVG, HTML/CSS, OCR scripts, or any other overlay to cover, rewrite, erase, stroke, or replace labels, headings, callouts, data values, or any other text inside an already generated infographic. Regenerate from a corrected prompt, switch to a layout with less on-image text, or ask the user which imperfect candidate to keep.
 
-Setting `preferred_image_backend: ask` forces the step-3 prompt every run regardless of available backends. Users change the pinned backend via the `## Changing Preferences` section below.
+**Prompt file (hard)**: before invoking any backend, write each image's full, final prompt to its own file under `prompts/` (`NN-{type}-[slug].md`) and pass that file (or its content) to the backend. It is the reproducibility record and lets you switch backends without rewriting prompts.
 
-**Prompt file requirement (hard)**: write each image's full, final prompt to a standalone file under `prompts/` (naming: `NN-{type}-[slug].md`) BEFORE invoking any backend. The backend receives the prompt file (or its content); the file is the reproducibility record and lets you switch backends without regenerating prompts.
-
-Concrete tool names (`imagegen`, `GenerateImage`, `image_generate`, `baoyu-image-gen`) above are examples — substitute the local equivalents under the same rule.
+Change the pinned backend via `## Changing Preferences` below. Tool names above are examples; use the local equivalent in other runtimes.
 
 ## Reference Images
 
-Users may supply reference images to guide style, palette, composition, or subject.
-
-**Intake**: Accept via `--ref <files...>` or when the user provides file paths / pastes images in conversation.
+Accept via `--ref <files...>`, file paths, or pasted images (guide style, palette, composition, or subject):
 - File path(s) → copy to `refs/NN-ref-{slug}.{ext}` alongside the output
-- Pasted image with no path → ask the user for the path (per the User Input Tools rule above), or extract style traits verbally as a text fallback
-- No reference → skip this section
-
-**Usage modes** (per reference):
+- Pasted image with no path → ask for the path (per User Input Tools), or extract style traits verbally as a text fallback
 
 | Usage | Effect |
 |-------|--------|
@@ -63,7 +56,7 @@ Users may supply reference images to guide style, palette, composition, or subje
 | `style` | Extract style traits (line treatment, texture, mood) and append to the prompt body |
 | `palette` | Extract hex colors from the image and append to the prompt body |
 
-**Record in `prompts/infographic.md` frontmatter** when refs exist:
+Record refs in `prompts/infographic.md` frontmatter:
 
 ```yaml
 references:
@@ -72,19 +65,15 @@ references:
     usage: direct
 ```
 
-**At generation time**:
-- Verify each referenced file exists on disk
-- If `usage: direct` AND the chosen backend accepts reference images (e.g., `baoyu-image-gen` via `--ref`) → pass the file via the backend's ref parameter
-- Otherwise → embed extracted `style`/`palette` traits in the prompt text
+At generation: verify each referenced file exists; if `usage: direct` AND the backend accepts reference images (e.g., `baoyu-image-gen` via `--ref`), pass it via the backend's ref parameter; otherwise embed extracted `style`/`palette` traits in the prompt text.
 
 ## Confirmation Policy
 
-Default behavior: **confirm before generation**.
+Default: **confirm before generation**.
 
-- Treat explicit skill invocation, a file path, a matched keyword shortcut, `EXTEND.md` defaults, and the documented default combination as **recommendation inputs only**. None of them authorizes skipping confirmation.
-- Do **not** start Step 5 or Step 6 until the user confirms the combination/aspect/language/backend choices.
-- Skip confirmation only when the current request explicitly says to do so, for example: `--no-confirm`, "直接生成", "不用确认", "跳过确认", "按默认出图", or equivalent wording.
-- If confirmation is skipped explicitly, state the assumed combination/aspect/language/backend in the next user-facing update before generating.
+- Explicit skill invocation, a file path, a matched keyword shortcut, `EXTEND.md` defaults, and the documented default combination are recommendation inputs only — none authorizes skipping confirmation.
+- Do not start Step 5 or Step 6 until the user confirms the combination/aspect/language/backend choices.
+- Skip confirmation only when the current request explicitly says so: `--no-confirm`, "直接生成", "不用确认", "跳过确认", "按默认出图", or equivalent. Then state the assumed combination/aspect/language/backend in the next user-facing update before generating.
 
 ## Options
 
@@ -98,6 +87,8 @@ Default behavior: **confirm before generation**.
 | `--ref <files...>` | Reference images (file paths) for style / palette / composition / subject guidance |
 
 ## Layout Gallery (21)
+
+Definitions: `references/layouts/<layout>.md`.
 
 | Layout | Best For |
 |--------|----------|
@@ -123,9 +114,9 @@ Default behavior: **confirm before generation**.
 | `circular-flow` | Cycles, recurring processes |
 | `dense-modules` | High-density modules, data-rich guides |
 
-Full definitions live at `references/layouts/<layout>.md`.
-
 ## Style Gallery (22)
+
+Definitions: `references/styles/<style>.md`.
 
 | Style | Description |
 |-------|-------------|
@@ -152,8 +143,6 @@ Full definitions live at `references/layouts/<layout>.md`.
 | `hand-drawn-edu` | Macaron pastels, hand-drawn wobble, stick figures |
 | `retro-popup-pop` | Retro popup collage, vintage UI, thick outlines, flat pop colors |
 
-Full definitions live at `references/styles/<style>.md`.
-
 ## Recommended Combinations
 
 | Content Type | Layout + Style |
@@ -177,11 +166,11 @@ Full definitions live at `references/styles/<style>.md`.
 | Educational Diagram | `hub-spoke` + `hand-drawn-edu` |
 | Process Tutorial | `linear-progression` + `hand-drawn-edu` |
 
-Default combination: `bento-grid` + `craft-handmade` (fallback recommendation only — per the [Confirmation Policy](#confirmation-policy), defaults never bypass Step 4).
+Default combination: `bento-grid` + `craft-handmade` (fallback recommendation only — never bypasses Step 4).
 
 ## Keyword Shortcuts
 
-When the user's input contains these keywords, use the mapped layout as the leading Step 3 recommendation and promote the listed styles to the top of the Step 3 list. Skip content-based layout inference for matched keywords. Append any `Prompt Notes` to the Step 5 prompt.
+When the user's input contains these keywords, use the mapped layout as the leading Step 3 recommendation, promote the listed styles to the top of the Step 3 list, skip content-based layout inference, and append any `Prompt Notes` to the Step 5 prompt.
 
 | User Keyword | Layout | Recommended Styles | Default Aspect | Prompt Notes |
 |--------------|--------|--------------------|----------------|--------------|
@@ -211,9 +200,7 @@ Slug: 2-4 words kebab-case from topic. Conflict: append `-YYYYMMDD-HHMMSS`.
 
 ### Step 1: Setup & Analyze
 
-**1.1 Load Preferences (EXTEND.md)**
-
-Check EXTEND.md in priority order — the first one found wins:
+**1.1 Load Preferences (EXTEND.md)** — first match wins:
 
 | Priority | Path | Scope |
 |----------|------|-------|
@@ -221,54 +208,30 @@ Check EXTEND.md in priority order — the first one found wins:
 | 2 | `${XDG_CONFIG_HOME:-$HOME/.config}/baoyu-skills/baoyu-infographic/EXTEND.md` | XDG |
 | 3 | `$HOME/.baoyu-skills/baoyu-infographic/EXTEND.md` | User home |
 
-| Result | Action |
-|--------|--------|
-| Found | Read, parse, display a one-line summary |
-| Not found | Ask the user with `AskUserQuestion` (see `references/config/first-time-setup.md`) |
+Found → read, parse, display a one-line summary. Not found → ask the user with `AskUserQuestion` per `references/config/first-time-setup.md`. Supports preferred layout/style, default aspect, language, image backend, custom styles (schema: `references/config/preferences-schema.md`).
 
-**EXTEND.md supports**: preferred layout/style, default aspect ratio, language preference, preferred image backend, custom style definitions.
+**1.2 Analyze Content → `analysis.md`** (format: `references/analysis-framework.md`)
 
-Schema: `references/config/preferences-schema.md`
-
-**1.2 Analyze Content → `analysis.md`**
-
-1. Save source content (file path or paste → `source.md`)
-   - **Backup rule**: If `source.md` exists, rename to `source-backup-YYYYMMDD-HHMMSS.md`
+1. Save source content (file path or paste → `source.md`). **Backup rule**: if `source.md` exists, rename to `source-backup-YYYYMMDD-HHMMSS.md`
 2. Analyze: topic, data type, complexity, tone, audience
 3. Detect source language and user language
 4. Extract design instructions from user input
-5. Save analysis
-   - **Backup rule**: If `analysis.md` exists, rename to `analysis-backup-YYYYMMDD-HHMMSS.md`
-
-See `references/analysis-framework.md` for detailed format.
+5. Save analysis. **Backup rule**: if `analysis.md` exists, rename to `analysis-backup-YYYYMMDD-HHMMSS.md`
 
 ### Step 2: Generate Structured Content → `structured-content.md`
 
-Transform content into infographic structure:
-1. Title and learning objectives
-2. Sections with: key concept, content (verbatim), visual element, text labels
-3. Data points (all statistics/quotes copied exactly)
-4. Design instructions from user
+Format: `references/structured-content-template.md`. Title and learning objectives; sections with key concept, content (verbatim), visual element, text labels; data points (all statistics/quotes copied exactly); user design instructions.
 
 **Rules**: Markdown only. No new information. Preserve data faithfully. Strip any credentials or secrets from output.
 
-See `references/structured-content-template.md` for detailed format.
-
 ### Step 3: Recommend Combinations
 
-**3.1 Check Keyword Shortcuts first**: If user input matches a keyword from the **Keyword Shortcuts** table, use the associated layout as the leading recommendation and prioritize associated styles as top recommendations. Skip content-based layout inference.
-
-**3.2 Otherwise**, recommend 3-5 layout×style combinations based on:
-- Data structure → matching layout
-- Content tone → matching style
-- Audience expectations
-- User design instructions
+1. If user input matches a **Keyword Shortcut**, apply it (see above).
+2. Otherwise recommend 3-5 layout×style combinations from data structure → layout, content tone → style, audience expectations, and user design instructions.
 
 ### Step 4: Confirm Options
 
-**Hard gate**: this step is mandatory per the [Confirmation Policy](#confirmation-policy) — Steps 5–6 cannot start until the user confirms here (or explicitly opts out with `--no-confirm` / equivalent in the current request).
-
-Ask the user to confirm the questions below following the [User Input Tools](#user-input-tools) rule at the top of this file (batch into one call if the runtime supports multiple questions; otherwise ask one at a time in priority order).
+**Hard gate** per the [Confirmation Policy](#confirmation-policy) (opt-out: `--no-confirm` / equivalent in the current request). Ask per [User Input Tools](#user-input-tools):
 
 | Priority | Question | When | Options |
 |----------|----------|------|---------|
@@ -279,56 +242,29 @@ Ask the user to confirm the questions below following the [User Input Tools](#us
 
 ### Step 5: Generate Prompt → `prompts/infographic.md`
 
-**Backup rule**: If `prompts/infographic.md` exists, rename to `prompts/infographic-backup-YYYYMMDD-HHMMSS.md`
+**Backup rule**: if `prompts/infographic.md` exists, rename to `prompts/infographic-backup-YYYYMMDD-HHMMSS.md`.
 
-Combine:
-1. Layout definition from `references/layouts/<layout>.md`
-2. Style definition from `references/styles/<style>.md`
-3. Base template from `references/base-prompt.md`
-4. Structured content from Step 2
-5. All text in confirmed language
+Combine: layout definition (`references/layouts/<layout>.md`), style definition (`references/styles/<style>.md`), base template (`references/base-prompt.md`), structured content from Step 2; all text in the confirmed language.
 
-**Aspect ratio resolution** for `{{ASPECT_RATIO}}`:
-- Named presets → ratio string: landscape→`16:9`, portrait→`9:16`, square→`1:1`
-- Custom W:H ratios → use as-is (e.g., `3:4`, `4:3`, `2.35:1`)
+`{{ASPECT_RATIO}}`: landscape→`16:9`, portrait→`9:16`, square→`1:1`; custom W:H ratios as-is (e.g., `3:4`, `4:3`, `2.35:1`).
 
 ### Step 6: Generate Image
 
-1. Resolve the backend per the `## Image Generation Tools` rule at the top of this file.
-2. Ensure the full final prompt is persisted at `prompts/infographic.md` (already written in Step 5) BEFORE invoking the backend — the file is the reproducibility record.
-3. **Check for existing file**: Before generating, check if `infographic.png` exists
-   - If exists: Rename to `infographic-backup-YYYYMMDD-HHMMSS.png`
-4. Call the chosen backend with the prompt file and output path.
-   - **`codex-imagegen` invocation**: when the rule resolves to `codex-imagegen`, see [references/codex-imagegen.md](references/codex-imagegen.md) for the invocation contract (preferred `baoyu-image-gen --provider codex-cli` path, runtime wrapper discovery, parameter notes, stdout schema, batch semantics).
-5. On failure, auto-retry once
+1. Resolve the backend per `## Image Generation Tools`.
+2. Ensure the full final prompt is persisted at `prompts/infographic.md` (Step 5) BEFORE invoking the backend.
+3. If `infographic.png` exists, rename to `infographic-backup-YYYYMMDD-HHMMSS.png`.
+4. Call the backend with the prompt file and output path. For `codex-imagegen`, see [references/codex-imagegen.md](references/codex-imagegen.md).
+5. On failure, auto-retry once.
 
-Text correction policy:
-
-- If labels, headings, callouts, data values, or any other rendered text is misspelled, garbled, hard to read, or visually weak, do not patch the bitmap with code.
-- For text-correction regenerations, write a new prompt file and a new output path so the flawed candidate is preserved for comparison.
-- Post-processing is limited to crop, resize, compression, or format conversion that does not alter text or the main composition.
+Text correction: never patch misspelled, garbled, or weak rendered text (labels, headings, callouts, data values) in the bitmap with code. Write a new prompt file and a new output path so the flawed candidate is kept for comparison. Post-processing is limited to crop, resize, compression, or format conversion that doesn't alter text or composition.
 
 ### Step 7: Output Summary
 
 Report: topic, layout, style, aspect, language, image backend, output path, files created.
 
-## References
-
-- `references/analysis-framework.md` - Analysis methodology
-- `references/structured-content-template.md` - Content format
-- `references/base-prompt.md` - Prompt template
-- `references/layouts/<layout>.md` - 21 layout definitions
-- `references/styles/<style>.md` - 21 style definitions
-
 ## Changing Preferences
 
-EXTEND.md lives at the first matching path in Step 1.1. Three ways to change it:
+EXTEND.md lives at the first matching path in Step 1.1. Edit it directly (schema: `references/config/preferences-schema.md`), or delete it / ask "reconfigure baoyu-infographic preferences" / "重新配置" to re-run first-time setup. Common edits:
 
-- **Edit directly** — open EXTEND.md and change fields. Full schema: `references/config/preferences-schema.md`.
-- **Reconfigure interactively** — delete EXTEND.md (or ask "reconfigure baoyu-infographic preferences" / "重新配置"). The next run re-triggers first-time setup.
-- **Common one-line edits**:
-  - `preferred_image_backend: auto` — default; runtime-native tool wins, falls back to the only installed backend, asks only if multiple non-native are present.
-  - `preferred_image_backend: codex-imagegen` — pin to Codex's built-in.
-  - `preferred_image_backend: baoyu-image-gen` — pin to the baoyu-image-gen skill.
-  - `preferred_image_backend: ask` — confirm backend every run.
-  - `preferred_layout: dense-modules`, `preferred_style: morandi-journal`, `preferred_aspect: portrait`, `language: zh` — shift the Step-3 recommendations and Step-4 defaults (per [Confirmation Policy](#confirmation-policy), these never bypass Step 4).
+- `preferred_image_backend`: `auto` (default; runtime-native wins, else the only installed backend, ask if multiple non-native) | `codex-imagegen` | `baoyu-image-gen` | `ask` (confirm every run)
+- `preferred_layout: dense-modules`, `preferred_style: morandi-journal`, `preferred_aspect: portrait`, `language: zh` — shift Step-3 recommendations and Step-4 defaults (never bypass Step 4).

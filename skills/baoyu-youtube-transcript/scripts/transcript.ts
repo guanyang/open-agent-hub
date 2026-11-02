@@ -22,6 +22,22 @@ export function parseTranscriptXml(xml: string): Snippet[] {
       duration: parseFloat(match[2] || "0"),
     });
   }
+  if (snippets.length) return snippets;
+
+  // Current YouTube timedtext format 3 uses millisecond paragraph attributes
+  // and optional word-level <s> children instead of legacy <text> nodes.
+  const paragraphPattern = /<p\b([^>]*)>([\s\S]*?)<\/p>/g;
+  while ((match = paragraphPattern.exec(xml)) !== null) {
+    const start = match[1].match(/(?:^|\s)t="([^"]*)"/)?.[1];
+    const duration = match[1].match(/(?:^|\s)d="([^"]*)"/)?.[1];
+    const text = htmlUnescape(stripTags(match[2])).replace(/\s+/g, " ").trim();
+    if (!text || start === undefined) continue;
+    snippets.push({
+      text,
+      start: parseFloat(start) / 1000,
+      duration: parseFloat(duration || "0") / 1000,
+    });
+  }
   return snippets;
 }
 
@@ -99,12 +115,11 @@ export function parseTranscriptPayload(payload: string, url: string): Snippet[] 
   return parseTranscriptXml(payload);
 }
 
-function isCJK(ch: string): boolean {
+function isUnspacedCJK(ch: string): boolean {
   const code = ch.charCodeAt(0);
   return (code >= 0x4E00 && code <= 0x9FFF) ||
     (code >= 0x3040 && code <= 0x309F) ||
     (code >= 0x30A0 && code <= 0x30FF) ||
-    (code >= 0xAC00 && code <= 0xD7AF) ||
     (code >= 0x3400 && code <= 0x4DBF) ||
     (code >= 0xF900 && code <= 0xFAFF);
 }
@@ -152,7 +167,7 @@ function mergeTexts(texts: string[]): string {
     if (!next) continue;
     const lastChar = result[result.length - 1];
     const firstChar = next[0];
-    if (isCJK(lastChar) || isCJK(firstChar)) {
+    if (isUnspacedCJK(lastChar) || isUnspacedCJK(firstChar)) {
       result += next;
     } else {
       result = result.trimEnd() + " " + next.trimStart();
