@@ -9,16 +9,20 @@
     attested hash, surfacing a "[PLAN TAMPERED]" warning instead.
 
     Plan resolution:
-      1. $env:PLAN_ID  -> ./.planning/$PLAN_ID/
-      2. ./.planning/.active_plan
-      3. Newest ./.planning/<dir>/ by LastWriteTime
-      4. Legacy ./task_plan.md at project root
+      1. -Target root or <plan-id> -> root or named plan
+      2. $env:PLAN_ID  -> ./.planning/$PLAN_ID/
+      3. ./.planning/.active_plan
+      4. Newest ./.planning/<dir>/ by LastWriteTime
+      5. Legacy ./task_plan.md at project root
 
 .PARAMETER Show
     Print the stored hash for the active plan.
 
 .PARAMETER Clear
     Remove the attestation (re-open the plan).
+
+.PARAMETER Target
+    Attest the root plan or one named plan without changing the active pointer.
 #>
 [CmdletBinding(DefaultParameterSetName = "Attest")]
 param(
@@ -26,10 +30,38 @@ param(
     [switch] $Show,
 
     [Parameter(ParameterSetName = "Clear")]
-    [switch] $Clear
+    [switch] $Clear,
+
+    [Parameter(ParameterSetName = "Target", Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $Target
 )
 
 $ErrorActionPreference = "Stop"
+
+# Refusals are one plain line. Write-Error would add the script path and the
+# source snippet and repeat the marker. [Console]::Error bypasses the 2>&1
+# capture of a script calling this one in-process (init-session.ps1 reports
+# the reason), so a nested call uses the error stream, which 2>&1 captures and
+# which still reaches the console when the caller captures only its output.
+$script:CalledFromScript = [bool]$MyInvocation.PSCommandPath
+
+function Write-AttestationRefusal {
+    param([string] $Message)
+    if ($script:CalledFromScript) { Write-Error -Message $Message -ErrorAction Continue }
+    else { [Console]::Error.WriteLine($Message) }
+}
+
+# An echoed selector must not forge output: a newline or an escape sequence
+# in PLAN_ID could otherwise print a fake status line.
+function Format-Selector {
+    param([string] $Value)
+    return ($Value -replace '[\x00-\x1F\x7F-\x9F]', '?')
+}
+
+function Write-PinRefusal {
+    Write-AttestationRefusal "[plan-attest] PWF_PLAN_ROOT=$(Format-Selector $env:PWF_PLAN_ROOT) did not resolve to a project root holding a plan. An explicit pin is a binding: nothing was attested and no other plan was substituted."
+}
 
 $script:IsWindowsHost = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
 if (-not $script:IsWindowsHost) {
@@ -228,16 +260,20 @@ if ($script:IsWindowsHost) {
         # local path is the only accepted shape, as in resolve-plan-dir.ps1.
         $isUnc = $pin.StartsWith('\\') -or $pin.StartsWith('//')
         if ($isUnc -or ($pin -notmatch '^[A-Za-z]:[\\/]')) {
-            throw "[plan-attest] PWF_PLAN_ROOT must be an absolute local path."
+            Write-AttestationRefusal "[plan-attest] PWF_PLAN_ROOT=$(Format-Selector $env:PWF_PLAN_ROOT) must be an absolute local path. An explicit pin is a binding: nothing was attested and no other plan was substituted."
+            exit 1
         }
         $securityRootPath = $pin
     }
-    $script:SecurityRootHandle = [PwfAttestationNative]::OpenDirectory($securityRootPath)
-    $script:SecurityRootFinalPath = [PwfAttestationNative]::FinalPath($script:SecurityRootHandle).TrimEnd('\', '/')
+    if (Test-Path -LiteralPath $securityRootPath -PathType Container) {
+        $script:SecurityRootHandle = [PwfAttestationNative]::OpenDirectory($securityRootPath)
+        $script:SecurityRootFinalPath = [PwfAttestationNative]::FinalPath($script:SecurityRootHandle).TrimEnd('\', '/')
+    }
 }
 
 function Test-FinalPathWithinSecurityRoot {
     param([string] $FinalPath)
+    if (-not $script:SecurityRootFinalPath) { return $false }
     $candidate = $FinalPath.TrimEnd('\', '/')
     if ([string]::Equals($candidate, $script:SecurityRootFinalPath, [StringComparison]::OrdinalIgnoreCase)) {
         return $true
@@ -411,16 +447,77 @@ function Test-SlugPlanDirectory {
 function Resolve-PlanFile {
     $resolver = Join-Path $PSScriptRoot "resolve-plan-dir.ps1"
     if (-not (Test-Path -LiteralPath $resolver -PathType Leaf)) { return $null }
+
+    if ($Target) {
+        if ($Target -ceq "root") {
+            # A missing pin has no frozen root to read a plan from.
+            if (-not $script:SecurityRootFinalPath) {
+                $script:PlanResolutionFailure = "Target"
+                return $null
+            }
+            $rootPlan = Join-Path $securityRootPath "task_plan.md"
+            $resolvedRoot = Resolve-ContainedPlanFile -Candidate $rootPlan -ExpectedDirectory $securityRootPath
+            if (-not $resolvedRoot) { $script:PlanResolutionFailure = "Target" }
+            return $resolvedRoot
+        }
+
+        # \z, because $ also matches before a final newline. Win32 drops a
+        # trailing dot, so alpha. would be another spelling of alpha.
+        if ($Target -notmatch '^[A-Za-z0-9_][A-Za-z0-9._-]*\z' -or $Target.EndsWith('.')) {
+            $script:PlanResolutionFailure = "Target"
+            return $null
+        }
+        $hadPlanId = Test-Path Env:PLAN_ID
+        $previousPlanId = $env:PLAN_ID
+        try {
+            $env:PLAN_ID = $Target
+            $targetDir = @(& $resolver | Where-Object { $_ }) | Select-Object -First 1
+        } finally {
+            if ($hadPlanId) { $env:PLAN_ID = $previousPlanId }
+            else { Remove-Item Env:PLAN_ID -ErrorAction SilentlyContinue }
+        }
+        if ($targetDir) {
+            $targetPlan = Join-Path $targetDir "task_plan.md"
+            $resolvedTarget = Resolve-ContainedPlanFile -Candidate $targetPlan -ExpectedDirectory $targetDir
+            if ($resolvedTarget) { return $resolvedTarget }
+        }
+        $script:PlanResolutionFailure = "Target"
+        return $null
+    }
+
     $resolvedDir = @(& $resolver | Where-Object { $_ }) | Select-Object -First 1
-    if (-not $resolvedDir -and ((& $resolver -CheckAmbiguity) -eq "PWF_PLAN_AMBIGUOUS_V1")) { return $null }
+    if (-not $resolvedDir -and ((& $resolver -CheckAmbiguity) -eq "PWF_PLAN_AMBIGUOUS_V1")) {
+        $script:PlanResolutionFailure = "Ambiguous"
+        return $null
+    }
     if ($resolvedDir) {
         $planFile = Join-Path $resolvedDir "task_plan.md"
-        return (Resolve-ContainedPlanFile -Candidate $planFile -ExpectedDirectory $resolvedDir)
+        $resolvedPlan = Resolve-ContainedPlanFile -Candidate $planFile -ExpectedDirectory $resolvedDir
+        if ($resolvedPlan) { return $resolvedPlan }
+        if (Test-Path -LiteralPath $planFile) {
+            $script:PlanResolutionFailure = "ResolvedPlan"
+        } elseif ($env:PLAN_ID) {
+            $script:PlanResolutionFailure = "PLAN_ID"
+        } elseif ($env:PWF_PLAN_ROOT) {
+            $script:PlanResolutionFailure = "PWF_PLAN_ROOT"
+        }
+        return $null
     }
 
     # An explicit pin or a scoped selector that failed validation must never
     # fall through and attest an unrelated legacy-root plan.
-    if ($env:PWF_PLAN_ROOT -or $env:PLAN_ID) { return $null }
+    if ($env:PWF_PLAN_ROOT -and -not $script:SecurityRootFinalPath) {
+        $script:PlanResolutionFailure = "PWF_PLAN_ROOT"
+        return $null
+    }
+    if ($env:PLAN_ID) {
+        $script:PlanResolutionFailure = "PLAN_ID"
+        return $null
+    }
+    if ($env:PWF_PLAN_ROOT) {
+        $script:PlanResolutionFailure = "PWF_PLAN_ROOT"
+        return $null
+    }
     $activePointer = Join-Path (Join-Path (Get-Location) ".planning") ".active_plan"
     $activePointerItem = Get-Item -LiteralPath $activePointer -Force -ErrorAction SilentlyContinue
     if ($activePointerItem) { return $null }
@@ -439,6 +536,9 @@ function Get-AttestationPath {
     param([string] $PlanFile)
     $planDir = Split-Path -Parent $PlanFile
     $cwd     = (Get-Location).Path
+    if ($Target -ceq "root") {
+        return (Join-Path $planDir ".plan-attestation")
+    }
     if ($planDir -eq $cwd) {
         if (Test-SlugPlanDirectory $cwd) {
             return (Join-Path $cwd ".attestation")
@@ -448,9 +548,22 @@ function Get-AttestationPath {
     return (Join-Path $planDir ".attestation")
 }
 
+$script:PlanResolutionFailure = $null
 $planFile = Resolve-PlanFile
 if (-not $planFile) {
-    Write-Error "[plan-attest] No task_plan.md found. Create a plan first."
+    if ($script:PlanResolutionFailure -eq "Ambiguous") {
+        Write-AttestationRefusal "[plan-attest] Multiple plans are available. Set PLAN_ID=<slug>; nothing was attested."
+    } elseif ($script:PlanResolutionFailure -eq "Target") {
+        Write-AttestationRefusal "[plan-attest] -Target $(Format-Selector $Target) did not resolve to a plan. An explicit target is a binding: nothing was attested and no other plan was substituted."
+    } elseif ($script:PlanResolutionFailure -eq "PLAN_ID") {
+        Write-AttestationRefusal "[plan-attest] PLAN_ID=$(Format-Selector $env:PLAN_ID) names no plan directory under .planning. An explicit selector is a binding: nothing was attested and no other plan was substituted."
+    } elseif ($script:PlanResolutionFailure -eq "PWF_PLAN_ROOT") {
+        Write-PinRefusal
+    } elseif ($script:PlanResolutionFailure -eq "ResolvedPlan") {
+        Write-AttestationRefusal "[plan-attest] The selected plan could not be read safely; nothing was attested."
+    } else {
+        Write-AttestationRefusal "[plan-attest] No task_plan.md found. Create a plan first."
+    }
     exit 1
 }
 
@@ -506,7 +619,7 @@ $storedHash = Write-SafeAscii -Path $attestationFile -ExpectedDirectory $attesta
 # (permissions, full disk) must not leave a stale attestation and exit clean.
 if ($null -ne $storedHash) { $storedHash = $storedHash.Trim() }
 if ($storedHash -ne $hashVal) {
-    Write-Error "[plan-attest] Attestation write verification FAILED for $attestationFile. Expected $hashVal, found $storedHash. The plan is NOT attested."
+    Write-AttestationRefusal "[plan-attest] Attestation write verification FAILED for $attestationFile. Expected $hashVal, found $storedHash. The plan is NOT attested."
     exit 1
 }
 
