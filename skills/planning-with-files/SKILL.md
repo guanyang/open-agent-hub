@@ -28,7 +28,7 @@ hooks:
         - type: command
           command: "[ -n \"${CLAUDE_PLUGIN_ROOT:-}\" ] && exit 0; SH=\"${CLAUDE_SKILL_DIR}/scripts/skill-hook.sh\"; [ -f \"$SH\" ] || SH=$(ls \"$HOME/.claude/skills/planning-with-files/scripts/skill-hook.sh\" \"$HOME/.claude/plugins/marketplaces/planning-with-files/scripts/skill-hook.sh\" 2>/dev/null | head -1); [ -n \"$SH\" ] && [ -f \"$SH\" ] && sh \"$SH\" --event=precompact; exit 0"
 metadata:
-  version: "3.28.1"
+  version: "3.28.2"
 ---
 
 # Planning with Files
@@ -314,9 +314,9 @@ Both slash commands carry `disable-model-invocation: true`, so invoke them expli
 
 ### PreCompact hook (auto)
 
-Both supported routes register a `PreCompact` hook with matcher `"*"`. It fires for manual and automatic compaction after the relevant hook route is active. With a selected plan, it prints a diagnostic reminder and the recorded `Plan-SHA256` when present. It stays silent without a plan and never blocks compaction.
+Both supported routes register a `PreCompact` hook with matcher `"*"`. It fires for manual and automatic compaction after the relevant hook route is active. With a selected plan, it prints a progress reminder and the recorded `Plan-SHA256` when present. It stays silent without a plan and never blocks compaction.
 
-Claude Code does not support `additionalContext` for PreCompact. Successful stdout from this event is diagnostic output, so the hook cannot make the model flush progress before compaction. Keep progress current during the task and recover from the selected files on the next prompt. The recorded digest can be compared with the plan bytes; it does not establish human approval.
+The current [Claude Code hook reference](https://code.claude.com/docs/en/hooks#precompact-output) describes successful PreCompact stdout as instructions for the compaction summary. This hook does not write planning files or start a separate tool-writing turn, so its reminder does not guarantee that unsaved progress reaches disk. Keep progress current during the task and recover from the selected files after compaction. The recorded digest can be compared with the plan bytes; it does not establish human approval.
 
 ### `/plan-goal` slash command
 
