@@ -59,7 +59,7 @@ if ($PlanFile -ne "") {
     }
 }
 
-if (-not (Test-Path $PlanFile)) {
+if (-not (Test-Path -LiteralPath $PlanFile)) {
     if ($Validate) { Write-Output '[planning-with-files] Plan format invalid: task_plan.md was not found.'; exit 1 }
     # Automatic gate checks have nothing to report without a plan; the explicit report keeps its notice.
     if ($Gate) { exit 0 }
@@ -68,69 +68,94 @@ if (-not (Test-Path $PlanFile)) {
 }
 
 # Read file content
-$content = Get-Content $PlanFile -Raw
-
-# Explicit creation validation never mutates a plan or changes Stop behavior.
-if ($Validate) {
-    $phases = 0
-    $statuses = 0
-    $inPhase = $false
-    $invalid = $false
-    foreach ($line in ($content -split '\r?\n')) {
-        if ($line -cmatch '^### Phase(?:[ \t]|$)') {
-            if ($inPhase -and $statuses -ne 1) { $invalid = $true }
-            $phases++
-            $inPhase = $true
-            $statuses = 0
-        } elseif ($line -match '^#{1,3}[ \t]') {
-            if ($inPhase -and $statuses -ne 1) { $invalid = $true }
-            $inPhase = $false
-        }
-        if ($inPhase) {
-            $statuses += ([regex]::Matches($line, '\*\*Status:\*\*[ \t]+(?:pending|in_progress|complete)(?:[^\p{L}\p{N}_]|$)')).Count
-            $statuses += ([regex]::Matches($line, '\[(?:pending|in_progress|complete)\]')).Count
-        }
-    }
-    if ($inPhase -and $statuses -ne 1) { $invalid = $true }
-    if ($phases -eq 0 -or $invalid) {
-        Write-Output '[planning-with-files] Plan format invalid: use ### Phase headings with exactly one native status per phase.'
-        exit 1
-    }
-    Write-Output ('[planning-with-files] Plan format valid (' + $phases + ' phases).')
+try {
+    $content = Get-Content -LiteralPath $PlanFile -Raw -Encoding UTF8 -ErrorAction Stop
+} catch {
+    Write-Output '[planning-with-files] Plan read error: phase completion unavailable.'
+    if ($Validate) { exit 1 }
     exit 0
 }
 
-# Count total phases
-$TOTAL = ([regex]::Matches($content, "### Phase")).Count
+# Count native statuses inside real phases, excluding fenced examples (#377).
+$counts = @{ total = 0; complete = 0; in_progress = 0; pending = 0 }
+$phase = $null
+$invalid = $false
+$activeHeading = ""
+$fence = ""
+$fenceLength = 0
+$malformedHeading = $false
+function Complete-Phase {
+    if ($null -ne $script:phase) {
+        if ($script:phase.Statuses.Count -ne 1) { $script:invalid = $true }
+        else {
+            $state = $script:phase.Statuses[0]
+            if ($state -ne 'in_progress') { $script:counts[$state]++ }
+        }
+        if ($script:phase.Statuses -contains 'in_progress') {
+            $script:counts.in_progress++
+            if (-not $script:activeHeading) { $script:activeHeading = $script:phase.Heading }
+        }
+    }
+    $script:phase = $null
+}
+foreach ($line in (($content -creplace '^\uFEFF', '') -split '\r?\n')) {
+    if ($fence) {
+        if ($line -match ('^ {0,3}' + [regex]::Escape($fence) + '{' + $fenceLength + ',}[ \t]*$')) { $fence = "" }
+        continue
+    }
+    if ($line -match '^ {0,3}(`{3,}|~{3,})' -and
+        ($Matches[1][0] -eq '~' -or -not $line.Substring($Matches[0].Length).Contains('`'))) {
+        $fence = $Matches[1].Substring(0, 1); $fenceLength = $Matches[1].Length
+        continue
+    }
+    if ($line -match '^ {0,3}>') { continue }
+    if ($line -cmatch '^ {0,3}### Phase(?:[0-9:]|-[0-9])') {
+        Complete-Phase
+        $malformedHeading = $true
+        continue
+    }
+    if ($line -cmatch '^ {0,3}### Phase(?:[ \t]|$)') {
+        Complete-Phase
+        $counts.total++
+        $phase = @{ Heading = $line; Statuses = @() }
+    } elseif ($line -match '^ {0,3}#{1,3}(?:[ \t]|$)') {
+        Complete-Phase
+    }
+    if ($null -ne $phase) {
+        foreach ($match in [regex]::Matches($line, '\*\*Status:\*\*[ \t]+(pending|in_progress|complete)(?![A-Za-z0-9_])|\[(pending|in_progress|complete)\]')) {
+            $state = $match.Groups[1].Value
+            if (-not $state) { $state = $match.Groups[2].Value }
+            $phase.Statuses += $state
+        }
+    }
+}
+Complete-Phase
+$TOTAL = $counts.total
+$COMPLETE = $counts.complete
+$IN_PROGRESS = $counts.in_progress
+$PENDING = $counts.pending
 
-# Count both formats per field and keep the larger of the two. A plan may mix
-# '**Status:** pending' on one phase with '[in_progress]' on another; counting
-# only the primary format (and falling back to inline ONLY when all three
-# primaries are zero) lost the inline count and let an in_progress plan slip
-# past the gate. Per-field max preserves the legacy single-format result
-# (the other format contributes 0) while catching mixed plans.
-$completePrimary = ([regex]::Matches($content, "\*\*Status:\*\* complete")).Count
-$inProgressPrimary = ([regex]::Matches($content, "\*\*Status:\*\* in_progress")).Count
-$pendingPrimary = ([regex]::Matches($content, "\*\*Status:\*\* pending")).Count
-
-$completeInline = ([regex]::Matches($content, "\[complete\]")).Count
-$inProgressInline = ([regex]::Matches($content, "\[in_progress\]")).Count
-$pendingInline = ([regex]::Matches($content, "\[pending\]")).Count
-
-$COMPLETE = [Math]::Max($completePrimary, $completeInline)
-$IN_PROGRESS = [Math]::Max($inProgressPrimary, $inProgressInline)
-$PENDING = [Math]::Max($pendingPrimary, $pendingInline)
+if ($Validate) {
+    if ($TOTAL -eq 0 -or $invalid -or $fence -or $malformedHeading) {
+        Write-Output '[planning-with-files] Plan format invalid: use ### Phase headings with exactly one native status per phase.'
+        exit 1
+    }
+    Write-Output ('[planning-with-files] Plan format valid (' + $TOTAL + ' phases).')
+    exit 0
+}
 
 # issue #191: no "### Phase" headings -> not a phase-structured plan. Report
 # nothing rather than a false "0/0 phases complete" status. With TOTAL=0 the
 # gate can never legitimately block (IN_PROGRESS is also 0), so exit is safe.
-if ($TOTAL -eq 0) {
+if ($TOTAL -eq 0 -and -not $fence -and -not $malformedHeading) {
     exit 0
 }
 
 # Keep explicit reports, but omit routine success from automatic gate checks.
 function Write-AdvisoryReport {
-    if ($COMPLETE -eq $TOTAL -and $TOTAL -gt 0) {
+    if ($fence -or $malformedHeading) {
+        Write-Output '[planning-with-files] Plan format error: phase completion unavailable.'
+    } elseif ($COMPLETE -eq $TOTAL -and $TOTAL -gt 0) {
         if ($Gate) { return }
         Write-Host ('[planning-with-files] ALL PHASES COMPLETE (' + $COMPLETE + '/' + $TOTAL + '). If the user has additional work, add new phases to task_plan.md before starting.')
     } else {
@@ -256,16 +281,7 @@ if ($blocks -gt 0 -and $ledgerNow -eq $ledgerPrev) {
 # Get-FirstInProgressPhase: heading text of the first phase whose Status is
 # in_progress. Plain text only -- no plan body beyond the heading.
 function Get-FirstInProgressPhase {
-    $heading = ""
-    foreach ($line in ($content -split "`n")) {
-        $trimmed = $line.TrimEnd("`r")
-        if ($trimmed -match '^### (.*)$') {
-            $heading = $Matches[1]
-        } elseif ($trimmed -match '\*\*Status:\*\* in_progress' -or $trimmed -match '\[in_progress\]') {
-            return $heading
-        }
-    }
-    return ""
+    return ($activeHeading -replace '^ {0,3}### ', '')
 }
 
 $phaseName = Get-FirstInProgressPhase
